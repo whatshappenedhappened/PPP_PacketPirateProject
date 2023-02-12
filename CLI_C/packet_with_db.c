@@ -4,11 +4,22 @@
 #include <string.h>
 #include <mariadb/mysql.h>
 #include <stdlib.h>
-// #include <mariadb/mysql.h>
+
+// FOR OUTPUT OPTION //
+#define OUTPUT_MODE o_mode
+
+/* STATIC VARIABLES FOR MYSQL */
+//MySQL
+static MYSQL *connection, conn;
+static MYSQL_RES *sql_result;
+static MYSQL_ROW sql_row;
+
+
 /* Ethernet addresses are 6 bytes */
 #define ETHER_ADDR_LEN	6
 #define SIZE_ETHERNET   14
 
+/* STRUCTURE DEFINITION PART */
 // Going to add got_packet and structures to use
 typedef struct dev_ip{
     unsigned char oct_first;
@@ -16,10 +27,6 @@ typedef struct dev_ip{
     unsigned char oct_third;
     unsigned char oct_fourth;
 } DEV_IP;
-
-DEV_IP devnet(unsigned char *);
-int devmask(bpf_u_int32);
-
 
 /* Ethernet header */
 typedef struct sniff_ethernet {
@@ -47,8 +54,6 @@ typedef struct sniff_ip {
 #define IP_HL(ip)		(((ip)->ip_vhl) & 0x0f) // & opt for left nibble, cuz ip header's maximum size is 20~60bytes
 #define IP_V(ip)		(((ip)->ip_vhl) >> 4)   // bit opt 4 times to left for right nibble
 
-
-
 /* TCP header */
 typedef u_int tcp_seq;
 
@@ -73,14 +78,22 @@ typedef struct sniff_tcp {
 	u_short th_sum;		/* checksum */
 	u_short th_urp;		/* urgent pointer */
 }layer4;
+///////////////////////////////
 
-
-
-
+/* FUNCTION DECLARATION PART */
+DEV_IP devnet(unsigned char *);
+int devmask(bpf_u_int32);
 
 void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
-int main() {
+int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
+
+void sql_selector(char *, char *);
+// void init_pcap();
+// void init_mysql();
+///////////////////////////////
+
+int main(int argc, char *argv[]) {
 
     pcap_if_t *dev;
     char errbuf[PCAP_ERRBUF_SIZE];
@@ -95,15 +108,33 @@ int main() {
     //----
     const char *packet;
     struct pcap_pkthdr header;
+    unsigned int p_loop_cnt = 5;
+
+    // DEV_IP //
+    u_char preFix;
+    // MYSQL //
+    connection = NULL;
+    // OUTPUT MODE //
+    unsigned char o_mode = 1;
+    int temp;
+    printf("\n");
+    /* OUTPUT MODE */
+    if (argc > 1 && argv[1]) {      // 실행시 입력값에 따라 상수 매크로의 값을 조절, -a는 모두 출력, 기본은 1
+        if(strstr(argv[1], "-a") != NULL) {
+            o_mode = 2;
+            printf("OUTPUT MODE = \"A friendly neighbor\"\n");
+        } else { printf("OUTPUTMODE = \"Hitman\"\n"); }
+    }
+
 
     if (pcap_findalldevs(&dev, errbuf) == PCAP_ERROR) {
         printf("pcap_findalldevs() failed : %s\n", errbuf);
         return 1;
     } else {
         devc = dev->name;
-        printf("pcap_findalldevs() OK.\t[Device: %s]\n", devc);
-        }
-
+        printf("pcap_findalldevs() OK.\t\t\t[ Device ]\t%s\n", devc);
+    }
+    
     if (pcap_lookupnet(devc, &net, &mask, errbuf) == PCAP_ERROR) {
         printf("pcap_lookupnet() failed : %s\n", errbuf);
         return 2;
@@ -111,25 +142,39 @@ int main() {
         struct in_addr ip;
         struct in_addr subnet;
         ip.s_addr = net;
-        subnet.s_addr = mask;
-        printf("pcap_lookupnet() OK.\t[IP: %s / Subnet: %s]\n", inet_ntoa(ip), inet_ntoa(subnet));
+        // subnet.s_addr = mask;
+        preFix = devmask(mask);
+        printf("pcap_lookupnet() OK.\t\t\t[ IP ]\t\t%s/%d\n", inet_ntoa(ip), preFix);
     }
 
     handle = pcap_open_live(devc, BUFSIZ, 1, 1000, errbuf);
     if (handle == NULL) {
         printf("pcap_open_live() failed : %s", errbuf);
         return 3;
-    } else { printf("pcap_open_live() OK.\t[Handler: %p]\n", handle);}
+    } else { printf("pcap_open_live() OK.\t\t\t[ Handler ]\t%p\n", handle);}
 
     if (pcap_compile(handle, &fp, filter, 0, net) == PCAP_ERROR) {
         printf("pcap_compile() failed : %s2\n",pcap_geterr(handle));
         return 4;
-    } else { printf("pcap_compile() OK.\t[Filter: %s]\n", filter);}
+    } else { printf("pcap_compile() OK.\t\t\t[ Filter ]\t%s\n", filter);}
     
     if (pcap_setfilter(handle, &fp) == PCAP_ERROR) {
         printf("pcap_setfilter() failed : %s\n", pcap_geterr(handle));
         return 5;
     } else { printf("pcap_setfilter() OK.\n"); }
+
+    printf("\n");
+
+    // MYSQL CONNECTION
+    if(mysql_init(&conn) == NULL) {
+        fprintf(stderr, "mysql_init() failed.\n");
+        return 6;
+    } else { printf("mysql_init() OK.\n"); }
+    connection = mysql_real_connect(&conn, "localhost", "root", "root", "blocker", 3306, NULL, 0);
+    if (connection == NULL) {
+        fprintf(stderr, "mysql_real_connect() failed : %s\n", mysql_error(&conn));
+        return 7;
+    } else { printf("mysql_real_connect() OK.\n"); }
 
 
     printf("\n\n");
@@ -137,12 +182,18 @@ int main() {
     // packet = pcap_next(handle, &header);
     // printf("Packet just got jacked : [%d]bytes\n", header.len);
 
-    pcap_loop(handle, 5, got_packet, NULL);
+    // PCAP CLOSE
+    pcap_loop(handle, p_loop_cnt, got_packet, NULL);
 
     if(handle != NULL) {
         pcap_close(handle);
         handle = NULL;
     } else { printf("\nHandle was closed\n"); }
+
+    // MYSQL CLOSE
+    mysql_close(&conn);
+    mysql_free_result(sql_result);
+    sql_result = NULL;
 
     return 0;
 }
@@ -154,15 +205,48 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     layer4 *th = (layer4 *)(packet + SIZE_ETHERNET + ip_size);
     u_int tcp_size = 4 * TH_OFF(th);
     const char* payload = (char *)(packet + SIZE_ETHERNET + ip_size + tcp_size);
-    //MySQL
-    MYSQL *connection = NULL, conn;
-    MYSQL_RES *sql_result;
-    MYSQL_ROW sql_row;
-    char *query_string = malloc(10485760);
+    char* find_host = NULL;
+    int url_size = 0;
+    char url_name[512];
+    char *url_from_db = NULL;
+
+    /* ip output variables */
+    char srcip[16], dstip[16];
+    char *srcbf = inet_ntoa(ip->ip_src);
+    strcpy(srcip, srcbf);
+    char *dstbf = inet_ntoa(ip->ip_dst);
+    strcpy(dstip, dstbf);
+
+    // MYSQL
+    char *query_string = malloc(10485760);      // must be freed before the function closed
     memset(query_string, 0x00, 10485760);
+
+    // FINDING HOST
+    memset(url_name, 0x00, sizeof(url_name));
+    find_host = strstr(payload, "Host:");
+    if (find_host != NULL) {
+        find_host += 6;
+        url_size = strstr(find_host, "\x0d\x0a") - find_host;
+        memcpy(url_name, find_host, url_size);
+        printf("URL : %s\n", url_name);
+        sql_selector(url_name, url_from_db);
+    }
+    if (url_size != 0) {
+        sprintf(query_string, "SELECT domain_name FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
+        if(mysql_query(connection, query_string) == 0) {
+        } else { printf(" domain [ %s ] was authorized or doesn't exist in current DB.\n", url_name); }
+    }
+    // sendraw(packet, header);
+
+    // Query
+    sprintf(query_string, "SELECT ipv4, domain_name FROM tb_domains WHERE ipv4 = '%s'", dstip);
+    mysql_query(connection, query_string);
+    sql_result = mysql_store_result(connection);
+    sql_row = mysql_fetch_row(sql_result);
 
     // every data from packet will be stored as big-endian way except the type of char(1 byte)
     /* ethernet output */
+    #if OUTPUT_MODE == 2
     printf("[Ethernet]\n");
     printf("dstMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_dhost[0],
                         (*ethernet).ether_dhost[1],
@@ -180,13 +264,6 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
                         );
     printf("ethType= %x\n", ethernet->ether_type);
     printf("\n");
-
-    /* ip output */
-    char srcip[16], dstip[16];
-    char *srcbf = inet_ntoa(ip->ip_src);
-    strcpy(srcip, srcbf);
-    char *dstbf = inet_ntoa(ip->ip_dst);
-    strcpy(dstip, dstbf);
 
     printf("[IP]\n");
     printf("srcIp= %s\n", srcip);
@@ -208,28 +285,32 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     printf("headerLen= %d\n", TH_OFF(th) * 4);
     // printf("%x\n");
     printf("\n");
-
+    #endif
 
     /* payload output */
+    #if OUTPUT_MODE == 2
     printf("[PAYLOAD]\n");
     printf("%s\n", payload);
     printf("==================================\n\n");
-    //Query
-    mysql_init(&conn);
-    connection = mysql_real_connect(&conn, "localhost", "root", "root", "blocker", 3306, NULL, 0);
-    sprintf(query_string, "SELECT ipv4, domain_name FROM domains WHERE ipv4 = '%s'", dstip);
-    mysql_query(connection, query_string);
-    sql_result = mysql_store_result(connection);
     printf("[SQL RESULT]\n");
-    if ((sql_row = mysql_fetch_row(sql_result)) != NULL) {
+    if (sql_row != NULL) {
         printf("Found IP : %s\t%s\n\n", sql_row[0], sql_row[1]);
     } else printf("-- No IP Found --\n\n");
-    //Close
-    mysql_close(&conn);
-    mysql_free_result(sql_result);
-    sql_result = NULL;
     printf("==================================\n\n");
+    #endif
 
+    free(query_string);
+}
+
+int sendraw(const u_char *packet, const struct pcap_pkthdr *header) {
+    printf("YOU'RE IN sendraw()!!\n");
+    return 0;
+}
+
+void sql_selector(char * url_name, char * url_cpy) {
+    char *query_string = malloc(10485760);      // must be freed before the function closed
+    memset(query_string, 0x00, 10485760);
+    sprintf(query_string, "SELECT domain_name FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
 }
 
 
