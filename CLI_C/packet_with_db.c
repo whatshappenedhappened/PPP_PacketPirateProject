@@ -12,7 +12,7 @@
 //MySQL
 static MYSQL *connection, conn;
 static MYSQL_RES *sql_result;
-static MYSQL_ROW sql_row;
+static MYSQL_ROW sql_row;       // must be freed before the program closed
 
 
 /* Ethernet addresses are 6 bytes */
@@ -88,7 +88,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
 
-void sql_selector(char *, char *);
+int sql_get_domain(char *, char *);
 // void init_pcap();
 // void init_mysql();
 ///////////////////////////////
@@ -116,15 +116,20 @@ int main(int argc, char *argv[]) {
     connection = NULL;
     // OUTPUT MODE //
     unsigned char o_mode = 1;
+    char * o_output = "Default";
     int temp;
     printf("\n");
     /* OUTPUT MODE */
     if (argc > 1 && argv[1]) {      // 실행시 입력값에 따라 상수 매크로의 값을 조절, -a는 모두 출력, 기본은 1
         if(strstr(argv[1], "-a") != NULL) {
             o_mode = 2;
-            printf("OUTPUT MODE = \"A friendly neighbor\"\n");
-        } else { printf("OUTPUTMODE = \"Hitman\"\n"); }
+            o_output = "A Friendly Neighbor";
+        } else if (strstr(argv[1], "-h") != NULL) {
+            o_mode = 0;
+            o_output = "Hitman";
+        }
     }
+    printf("OutputMode = \" %s \"\n", o_output);
 
 
     if (pcap_findalldevs(&dev, errbuf) == PCAP_ERROR) {
@@ -185,14 +190,19 @@ int main(int argc, char *argv[]) {
     // PCAP CLOSE
     pcap_loop(handle, p_loop_cnt, got_packet, NULL);
 
-    if(handle != NULL) {
+    if (handle != NULL) {
         pcap_close(handle);
         handle = NULL;
-    } else { printf("\nHandle was closed\n"); }
+    } else { puts("\nhandle is already closed\n"); }
 
     // MYSQL CLOSE
-    mysql_close(&conn);
-    mysql_free_result(sql_result);
+    if (&conn != NULL) {
+        mysql_close(&conn);
+    } else { puts("\nconn is already closed\n"); }
+    if (sql_result != NULL) {
+        mysql_free_result(sql_result);
+        sql_result = NULL;
+    } else { puts("\nsql_result is already closed\n"); }
     sql_result = NULL;
 
     return 0;
@@ -209,6 +219,8 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     int url_size = 0;
     char url_name[512];
     char *url_from_db = NULL;
+    int sql_get_flag = 1;
+    int urlcmp_flag = 1;
 
     /* ip output variables */
     char srcip[16], dstip[16];
@@ -229,12 +241,13 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         url_size = strstr(find_host, "\x0d\x0a") - find_host;
         memcpy(url_name, find_host, url_size);
         printf("URL : %s\n", url_name);
-        sql_selector(url_name, url_from_db);
+        sql_get_flag = sql_get_domain(url_name, url_from_db);
     }
-    if (url_size != 0) {
-        sprintf(query_string, "SELECT domain_name FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
-        if(mysql_query(connection, query_string) == 0) {
-        } else { printf(" domain [ %s ] was authorized or doesn't exist in current DB.\n", url_name); }
+    if (sql_get_flag == 0) {
+        urlcmp_flag = strncmp(url_name, url_from_db, url_size);
+    }
+    if (urlcmp_flag == 0) {
+        sendraw(packet, header);
     }
     // sendraw(packet, header);
 
@@ -307,10 +320,28 @@ int sendraw(const u_char *packet, const struct pcap_pkthdr *header) {
     return 0;
 }
 
-void sql_selector(char * url_name, char * url_cpy) {
+int sql_get_domain(char * url_name, char * url_cpy) {
     char *query_string = malloc(10485760);      // must be freed before the function closed
     memset(query_string, 0x00, 10485760);
-    sprintf(query_string, "SELECT domain_name FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
+    sprintf(query_string, "SELECT domain_name, count(domain_name) FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
+
+    if (mysql_query(connection, query_string) == 0) {
+        sql_result = mysql_store_result(connection);   // 셀렉트문으로 작성한 쿼리는 결과가 없어도((null)이 아닌 말 그대로 결과가 없어도) NULL을 반환하지 않는다
+        if (sql_result != NULL) {
+            sql_row = mysql_fetch_row(sql_result);
+            printf("db_url : %s\n", sql_row[0]);           // 셀렉트한 컬럼이 하나인 경우 sql_row는 배열이 되지 않는다.
+            url_cpy = sql_row[0];
+            printf("uu = %s", url_cpy);     // segment error////////////////////// 23-02-13
+        }
+    } else {
+        fprintf(stderr, "mysql_query() failed : %s\n", mysql_error(&conn));
+        return -1;
+    }
+    if (strncmp(url_cpy, "(null)", 5) == 0) {
+        return -1;
+    }
+
+    return 0;
 }
 
 
