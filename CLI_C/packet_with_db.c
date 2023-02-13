@@ -6,7 +6,8 @@
 #include <stdlib.h>
 
 // FOR OUTPUT OPTION //
-#define OUTPUT_MODE o_mode
+#define OUTPUT_MODE o_mode      // how the hell can i make this work
+#define OUTPUT_MODE_EX tmi
 
 /* STATIC VARIABLES FOR MYSQL */
 //MySQL
@@ -116,20 +117,24 @@ int main(int argc, char *argv[]) {
     connection = NULL;
     // OUTPUT MODE //
     unsigned char o_mode = 1;
+    unsigned char tmi = 0;
     char * o_output = "Default";
     int temp;
     printf("\n");
     /* OUTPUT MODE */
     if (argc > 1 && argv[1]) {      // 실행시 입력값에 따라 상수 매크로의 값을 조절, -a는 모두 출력, 기본은 1
         if(strstr(argv[1], "-a") != NULL) {
-            o_mode = 2;
+            o_mode = 1;
+            tmi = 1;
             o_output = "A Friendly Neighbor";
+            printf("%d\n", OUTPUT_MODE);
         } else if (strstr(argv[1], "-h") != NULL) {
             o_mode = 0;
             o_output = "Hitman";
+            printf("%d\n", OUTPUT_MODE);
         }
     }
-    printf("OutputMode = \" %s \"\n", o_output);
+    printf("Callsign = \" %s \"\n", o_output);
 
 
     if (pcap_findalldevs(&dev, errbuf) == PCAP_ERROR) {
@@ -249,14 +254,14 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     // sendraw(packet, header);
 
     // Query
-    sprintf(query_string, "SELECT ipv4, domain_name FROM tb_domains WHERE ipv4 = '%s'", dstip);
-    mysql_query(connection, query_string);
-    sql_result = mysql_store_result(connection);
-    sql_row = mysql_fetch_row(sql_result);
+    // sprintf(query_string, "SELECT ipv4, domain_name FROM tb_domains WHERE ipv4 = '%s'", dstip);
+    // mysql_query(connection, query_string);
+    // sql_result = mysql_store_result(connection);
+    // sql_row = mysql_fetch_row(sql_result);
 
     // every data from packet will be stored as big-endian way except the type of char(1 byte)
     /* ethernet output */
-    #if OUTPUT_MODE > 0
+    #if OUTPUT_MODE
     printf("[Ethernet]\n");
     printf("dstMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_dhost[0],
                         (*ethernet).ether_dhost[1],
@@ -298,7 +303,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     #endif
 
     /* payload output */
-    #if OUTPUT_MODE > 0
+    #if OUTPUT_MODE
     printf("[PAYLOAD]\n");
     printf("%s\n", payload);
     printf("==================================\n\n");
@@ -325,25 +330,38 @@ int sql_get_domain(char * url_name, int url_size) {
 
     sql_row = NULL;
 
-    if (mysql_query(connection, query_string) == 0) puts("OK : SQL sent to DB server.");
-    else {
+    if (mysql_query(connection, query_string) == 0) {
+        #if OUTPUT_MODE_EX
+        puts("OK : SQL sent to DB server.");
+        #endif
+    } else {
         free(query_string);
         return 0;
     }
-    if ((sql_result = mysql_store_result(connection)) != NULL) puts("OK : SQL result stored.");
-    else {
+
+    if ((sql_result = mysql_store_result(connection)) != NULL) {
+       #if OUTPUT_MODE_EX
+       puts("OK : SQL result stored.");
+       #endif
+    } else {
         free(query_string);
         return 0;
     }
+
     if ((sql_row = mysql_fetch_row(sql_result)) != NULL) {      // 기존 함수와 달리 결과가 없으면 NULL을 반환하는 mysql_fetch_row()의 성질을 이용하여 url이 db에 있는지 없는지를 비교
+        #if OUTPUT_MODE
         puts("\n[Found a matched url from DB server]\n");
+        #endif
         free(query_string);
         return 1;
     } else {
+        #if OUTPUT_MODE
         puts("[No matched url from DB server]\n");
+        #endif
         free(query_string);
         return 0;
     }
+
     free(query_string);
     return 0;
 }
