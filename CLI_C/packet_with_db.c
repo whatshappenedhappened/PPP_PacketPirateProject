@@ -259,7 +259,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 
     // every data from packet will be stored as big-endian way except the type of char(1 byte)
     /* ethernet output */
-    #if OUTPUT_MODE == 2
+    #if OUTPUT_MODE > 0
     printf("[Ethernet]\n");
     printf("dstMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_dhost[0],
                         (*ethernet).ether_dhost[1],
@@ -301,7 +301,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     #endif
 
     /* payload output */
-    #if OUTPUT_MODE == 2
+    #if OUTPUT_MODE > 0
     printf("[PAYLOAD]\n");
     printf("%s\n", payload);
     printf("==================================\n\n");
