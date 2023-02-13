@@ -88,7 +88,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
 
-int sql_get_domain(char *, char *);
+int sql_get_domain(char *, int);       // returns 1 on matched url found, 0 on no url found
 // void init_pcap();
 // void init_mysql();
 ///////////////////////////////
@@ -219,8 +219,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     int url_size = 0;
     char url_name[512];
     char *url_from_db = NULL;
-    int sql_get_flag = 1;
-    int urlcmp_flag = 1;
+    int sql_get_flag = 0;
 
     /* ip output variables */
     char srcip[16], dstip[16];
@@ -241,12 +240,10 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         url_size = strstr(find_host, "\x0d\x0a") - find_host;
         memcpy(url_name, find_host, url_size);
         printf("URL : %s\n", url_name);
-        sql_get_flag = sql_get_domain(url_name, url_from_db);
+        sql_get_flag = sql_get_domain(url_name, url_size);
+        printf("sql_get_flag = %d\n", sql_get_flag);
     }
-    if (sql_get_flag == 0) {
-        urlcmp_flag = strncmp(url_name, url_from_db, url_size);
-    }
-    if (urlcmp_flag == 0) {
+    if (sql_get_flag == 1) {
         sendraw(packet, header);
     }
     // sendraw(packet, header);
@@ -320,27 +317,34 @@ int sendraw(const u_char *packet, const struct pcap_pkthdr *header) {
     return 0;
 }
 
-int sql_get_domain(char * url_name, char * url_cpy) {
-    char *query_string = malloc(10485760);      // must be freed before the function closed
-    memset(query_string, 0x00, 10485760);
-    sprintf(query_string, "SELECT domain_name, count(domain_name) FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
+int sql_get_domain(char * url_name, int url_size) {
+    char *query_string = (char *)malloc(768);      // must be freed before the function closed
+    memset(query_string, 0x00, 768);
 
-    if (mysql_query(connection, query_string) == 0) {
-        sql_result = mysql_store_result(connection);   // 셀렉트문으로 작성한 쿼리는 결과가 없어도((null)이 아닌 말 그대로 결과가 없어도) NULL을 반환하지 않는다
-        if (sql_result != NULL) {
-            sql_row = mysql_fetch_row(sql_result);
-            printf("db_url : %s\n", sql_row[0]);           // 셀렉트한 컬럼이 하나인 경우 sql_row는 배열이 되지 않는다.
-            url_cpy = sql_row[0];
-            printf("uu = %s", url_cpy);     // segment error////////////////////// 23-02-13
-        }
+    sprintf(query_string, "SELECT domain_name FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
+
+    sql_row = NULL;
+
+    if (mysql_query(connection, query_string) == 0) puts("OK : SQL sent to DB server.");
+    else {
+        free(query_string);
+        return 0;
+    }
+    if ((sql_result = mysql_store_result(connection)) != NULL) puts("OK : SQL result stored.");
+    else {
+        free(query_string);
+        return 0;
+    }
+    if ((sql_row = mysql_fetch_row(sql_result)) != NULL) {      // 기존 함수와 달리 결과가 없으면 NULL을 반환하는 mysql_fetch_row()의 성질을 이용하여 url이 db에 있는지 없는지를 비교
+        puts("\n[Found a matched url from DB server]\n");
+        free(query_string);
+        return 1;
     } else {
-        fprintf(stderr, "mysql_query() failed : %s\n", mysql_error(&conn));
-        return -1;
+        puts("[No matched url from DB server]\n");
+        free(query_string);
+        return 0;
     }
-    if (strncmp(url_cpy, "(null)", 5) == 0) {
-        return -1;
-    }
-
+    free(query_string);
     return 0;
 }
 
