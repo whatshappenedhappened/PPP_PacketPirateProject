@@ -6,8 +6,9 @@
 #include <stdlib.h>
 
 // FOR OUTPUT OPTION //
-#define OUTPUT_MODE o_mode      // how the hell can i make this work
-#define OUTPUT_MODE_EX tmi
+// #define OUTPUT_MODE o_mode      // how the hell can i make this work
+// #define OUTPUT_MODE_EX tmi
+static output_flag = 1;
 
 /* STATIC VARIABLES FOR MYSQL */
 //MySQL
@@ -89,9 +90,11 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
 
-int sql_get_domain(char *, int);       // returns 1 on matched url found, 0 on no url found
+int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
+
 // void init_pcap();
 // void init_mysql();
+
 ///////////////////////////////
 
 int main(int argc, char *argv[]) {
@@ -116,22 +119,21 @@ int main(int argc, char *argv[]) {
     // MYSQL //
     connection = NULL;
     // OUTPUT MODE //
-    unsigned char o_mode = 1;
-    unsigned char tmi = 0;
+    // unsigned char o_mode = 1;
+    // unsigned char tmi = 0;
     char * o_output = "Default";
     int temp;
+    char func_str[1024];
+    int func_str_len = 0;
     printf("\n");
     /* OUTPUT MODE */
     if (argc > 1 && argv[1]) {      // 실행시 입력값에 따라 상수 매크로의 값을 조절, -a는 모두 출력, 기본은 1
         if(strstr(argv[1], "-a") != NULL) {
-            o_mode = 1;
-            tmi = 1;
+            output_flag = 1;
             o_output = "A Friendly Neighbor";
-            printf("%d\n", OUTPUT_MODE);
         } else if (strstr(argv[1], "-h") != NULL) {
-            o_mode = 0;
+            output_flag = 0;
             o_output = "Hitman";
-            printf("%d\n", OUTPUT_MODE);
         }
     }
     printf("Callsign = \" %s \"\n", o_output);
@@ -142,7 +144,7 @@ int main(int argc, char *argv[]) {
         return 1;
     } else {
         devc = dev->name;
-        printf("pcap_findalldevs() OK.\t\t\t[ Device ]\t%s\n", devc);
+        func_str_len = sprintf(func_str, "pcap_findalldevs() OK.\t\t\t[ Device ]\t%s\n", devc);
     }
     
     if (pcap_lookupnet(devc, &net, &mask, errbuf) == PCAP_ERROR) {
@@ -154,24 +156,24 @@ int main(int argc, char *argv[]) {
         ip.s_addr = net;
         // subnet.s_addr = mask;
         preFix = devmask(mask);
-        printf("pcap_lookupnet() OK.\t\t\t[ IP ]\t\t%s/%d\n", inet_ntoa(ip), preFix);
+        func_str_len += sprintf(func_str + func_str_len, "pcap_lookupnet() OK.\t\t\t[ IP ]\t\t%s/%d\n", inet_ntoa(ip), preFix);
     }
 
     handle = pcap_open_live(devc, BUFSIZ, 1, 1000, errbuf);
     if (handle == NULL) {
         printf("pcap_open_live() failed : %s", errbuf);
         return 3;
-    } else { printf("pcap_open_live() OK.\t\t\t[ Handler ]\t%p\n", handle);}
+    } else { func_str_len += sprintf(func_str + func_str_len, "pcap_open_live() OK.\t\t\t[ Handler ]\t%p\n", handle);}
 
     if (pcap_compile(handle, &fp, filter, 0, net) == PCAP_ERROR) {
         printf("pcap_compile() failed : %s2\n",pcap_geterr(handle));
         return 4;
-    } else { printf("pcap_compile() OK.\t\t\t[ Filter ]\t%s\n", filter);}
+    } else { func_str_len += sprintf(func_str + func_str_len, "pcap_compile() OK.\t\t\t[ Filter ]\t%s\n", filter);}
     
     if (pcap_setfilter(handle, &fp) == PCAP_ERROR) {
         printf("pcap_setfilter() failed : %s\n", pcap_geterr(handle));
         return 5;
-    } else { printf("pcap_setfilter() OK.\n"); }
+    } else { func_str_len += sprintf(func_str + func_str_len, "pcap_setfilter() OK.\n"); }
 
     printf("\n");
 
@@ -179,12 +181,15 @@ int main(int argc, char *argv[]) {
     if(mysql_init(&conn) == NULL) {
         fprintf(stderr, "mysql_init() failed.\n");
         return 6;
-    } else { printf("mysql_init() OK.\n"); }
+    } else { func_str_len += sprintf(func_str + func_str_len, "mysql_init() OK.\n"); }
     connection = mysql_real_connect(&conn, "localhost", "root", "root", "blocker", 3306, NULL, 0);
     if (connection == NULL) {
         fprintf(stderr, "mysql_real_connect() failed : %s\n", mysql_error(&conn));
         return 7;
-    } else { printf("mysql_real_connect() OK.\n"); }
+    } else { func_str_len += sprintf(func_str + func_str_len, "mysql_real_connect() OK.\n"); }
+
+    if (output_flag > 0)
+        printf("%s", func_str);
 
 
     printf("\n\n");
@@ -192,9 +197,12 @@ int main(int argc, char *argv[]) {
     // packet = pcap_next(handle, &header);
     // printf("Packet just got jacked : [%d]bytes\n", header.len);
 
-    // PCAP CLOSE
+    // PCAP LOOP //
     pcap_loop(handle, p_loop_cnt, got_packet, NULL);
+    // --------- //
 
+
+    // PCAP CLOSE
     if (handle != NULL) {
         pcap_close(handle);
         handle = NULL;
@@ -234,8 +242,8 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     strcpy(dstip, dstbf);
 
     // MYSQL
-    char *query_string = malloc(10485760);      // must be freed before the function closed
-    memset(query_string, 0x00, 10485760);
+    // char *query_string = malloc(1048);      // must be freed before the function closed
+    // memset(query_string, 0x00, 1048);
 
     // FINDING HOST
     memset(url_name, 0x00, sizeof(url_name));
@@ -245,7 +253,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         url_size = strstr(find_host, "\x0d\x0a") - find_host;
         memcpy(url_name, find_host, url_size);
         printf("URL : %s\n", url_name);
-        sql_get_flag = sql_get_domain(url_name, url_size);
+        sql_get_flag = sql_get_domain(url_name);
         printf("sql_get_flag = %d\n", sql_get_flag);
     }
     if (sql_get_flag == 1) {
@@ -261,7 +269,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 
     // every data from packet will be stored as big-endian way except the type of char(1 byte)
     /* ethernet output */
-    #if OUTPUT_MODE
+    
     printf("[Ethernet]\n");
     printf("dstMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_dhost[0],
                         (*ethernet).ether_dhost[1],
@@ -300,10 +308,10 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     printf("headerLen= %d\n", TH_OFF(th) * 4);
     // printf("%x\n");
     printf("\n");
-    #endif
+    
 
     /* payload output */
-    #if OUTPUT_MODE
+    
     printf("[PAYLOAD]\n");
     printf("%s\n", payload);
     printf("==================================\n\n");
@@ -312,9 +320,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         printf("Found IP : %s\t%s\n\n", sql_row[0], sql_row[1]);
     } else printf("-- No IP Found --\n\n");
     printf("==================================\n\n");
-    #endif
-
-    free(query_string);
+    
 }
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header) {
@@ -322,8 +328,8 @@ int sendraw(const u_char *packet, const struct pcap_pkthdr *header) {
     return 0;
 }
 
-int sql_get_domain(char * url_name, int url_size) {
-    char *query_string = (char *)malloc(768);      // must be freed before the function closed
+int sql_get_domain(char * url_name) {
+    char query_string[768];      // must be freed before the function closed
     memset(query_string, 0x00, 768);
 
     sprintf(query_string, "SELECT domain_name FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
@@ -331,41 +337,34 @@ int sql_get_domain(char * url_name, int url_size) {
     sql_row = NULL;
 
     if (mysql_query(connection, query_string) == 0) {
-        #if OUTPUT_MODE_EX
         puts("OK : SQL sent to DB server.");
-        #endif
     } else {
-        free(query_string);
         return 0;
     }
 
     if ((sql_result = mysql_store_result(connection)) != NULL) {
-       #if OUTPUT_MODE_EX
        puts("OK : SQL result stored.");
-       #endif
     } else {
-        free(query_string);
         return 0;
     }
 
     if ((sql_row = mysql_fetch_row(sql_result)) != NULL) {      // 기존 함수와 달리 결과가 없으면 NULL을 반환하는 mysql_fetch_row()의 성질을 이용하여 url이 db에 있는지 없는지를 비교
-        #if OUTPUT_MODE
+        
         puts("\n[Found a matched url from DB server]\n");
-        #endif
-        free(query_string);
+        
         return 1;
     } else {
-        #if OUTPUT_MODE
+        
         puts("[No matched url from DB server]\n");
-        #endif
-        free(query_string);
+        
         return 0;
     }
-
-    free(query_string);
     return 0;
 }
 
+//////////////////// PACKET OUTPUT /////////////////////
+
+// void pcap_print(char *packet)
 
 
 //////////////////// CUSTOMIZED IP CONVERT FUNCTION ////////////////////
