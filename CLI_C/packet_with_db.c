@@ -8,7 +8,7 @@
 // FOR OUTPUT OPTION //
 // #define OUTPUT_MODE o_mode      // how the hell can i make this work
 // #define OUTPUT_MODE_EX tmi
-static output_flag = 1;
+static int output_flag = 1;
 
 /* STATIC VARIABLES FOR MYSQL */
 //MySQL
