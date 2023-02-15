@@ -1,5 +1,4 @@
 var express = require('express');
-//var mongoose = require('mongoose');
 var bodyParser = require('body-parser');
 var methodOverride = require('method-override');
 var flash = require('connect-flash');
@@ -7,16 +6,6 @@ var session = require('express-session');
 var passport = require('./config/passport');
 var util = require('./util');
 var app = express();
-
-// DB setting
-//mongoose.connect(process.env.MONGO_DB);
-//var db = mongoose.connection;
-//db.once('open', function(){
-//  console.log('DB connected');
-//});
-//db.on('error', function(err){
-//  console.log('DB ERROR : ', err);
-//});
 
 // mariaDB connect
 const maria = require('./database/connect/maria');
@@ -45,7 +34,6 @@ app.use(function(req,res,next){
 
 // Routes
 app.use('/', require('./routes/home'));
-app.use('/abc', require('./routes/home'));
 app.use('/posts', util.getPostQueryString, require('./routes/posts'));
 app.use('/users', require('./routes/users'));
 app.use('/comments', util.getPostQueryString, require('./routes/comments'));
