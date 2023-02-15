@@ -324,6 +324,8 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     iphdr->ip_src = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_dst; // twist src ip and dst ip
     iphdr->ip_dst = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_src; // because this will be sent to src ip from packet_ref
     
+    tcphdr->th_sport = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_dport; // twist src port and dst port
+    tcphdr->th_dport = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_sport; // as the same reason as the ip hdr above
     
     return 0;
 }
