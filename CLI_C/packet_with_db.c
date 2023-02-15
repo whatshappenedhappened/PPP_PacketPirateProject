@@ -9,6 +9,7 @@
 // #define OUTPUT_MODE o_mode      // how the hell can i make this work
 // #define OUTPUT_MODE_EX tmi
 static int output_flag = 1;
+static int output_select = 1;
 
 /* STATIC VARIABLES FOR MYSQL */
 //MySQL
@@ -129,10 +130,12 @@ int main(int argc, char *argv[]) {
     /* OUTPUT MODE */
     if (argc > 1 && argv[1]) {      // 실행시 입력값에 따라 상수 매크로의 값을 조절, -a는 모두 출력, 기본은 1
         if(strstr(argv[1], "-a") != NULL) {
-            output_flag = 1;
+            output_select = 1;
+            output_flag = output_select;
             o_output = "A Friendly Neighbor";
         } else if (strstr(argv[1], "-h") != NULL) {
-            output_flag = 0;
+            output_select = 0;
+            output_flag = output_select;
             o_output = "Hitman";
         }
     }
@@ -198,7 +201,7 @@ int main(int argc, char *argv[]) {
     // printf("Packet just got jacked : [%d]bytes\n", header.len);
 
     // PCAP LOOP //
-    pcap_loop(handle, p_loop_cnt, got_packet, NULL);
+    pcap_loop(handle, 0, got_packet, NULL);
     // --------- //
 
 
@@ -256,6 +259,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         sql_get_flag = sql_get_domain(url_name);
         printf("sql_get_flag = %d\n", sql_get_flag);
     }
+
     if (sql_get_flag == 1) {
         sendraw(packet, header);
     }
@@ -269,62 +273,25 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 
     // every data from packet will be stored as big-endian way except the type of char(1 byte)
     /* ethernet output */
-    
-    printf("[Ethernet]\n");
-    printf("dstMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_dhost[0],
-                        (*ethernet).ether_dhost[1],
-                        ethernet->ether_dhost[2],
-                        ethernet->ether_dhost[3],
-                        ethernet->ether_dhost[4],
-                        ethernet->ether_dhost[5]
-                        );
-    printf("srcMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_shost[0],
-                        (*ethernet).ether_shost[1],
-                        ethernet->ether_shost[2],
-                        ethernet->ether_shost[3],
-                        ethernet->ether_shost[4],
-                        ethernet->ether_shost[5]
-                        );
-    printf("ethType= %x\n", ethernet->ether_type);
-    printf("\n");
 
-    printf("[IP]\n");
-    printf("srcIp= %s\n", srcip);
-    printf("dstIp= %s\n", dstip);
-    // printf("sType= %d\n", ip->ip_tos);
-    printf("totalLen= %hd bytes\n", ntohs(ip->ip_len));
-    printf("headerLen= %hd bytes\n", IP_HL(ip) * 4);
-    printf("TTL= %d\n", ip->ip_ttl);
-
-    printf("\n");
-
-
-    /* tcp output */
-    printf("[TCP]\n");
-    printf("srcPort= %d\n", ntohs(th->th_sport));
-    printf("dstPort= %d\n", ntohs(th->th_dport));
-    printf("seq= %u\n", ntohl(th->th_seq));
-    printf("ack= %u\n", ntohl(th->th_ack));
-    printf("headerLen= %d\n", TH_OFF(th) * 4);
-    // printf("%x\n");
-    printf("\n");
-    
-
-    /* payload output */
-    
-    printf("[PAYLOAD]\n");
-    printf("%s\n", payload);
-    printf("==================================\n\n");
-    printf("[SQL RESULT]\n");
-    if (sql_row != NULL) {
-        printf("Found IP : %s\t%s\n\n", sql_row[0], sql_row[1]);
-    } else printf("-- No IP Found --\n\n");
-    printf("==================================\n\n");
+    output_flag = output_select;
     
 }
 
-int sendraw(const u_char *packet, const struct pcap_pkthdr *header) {
+int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     printf("YOU'RE IN sendraw()!!\n");
+    char packet_buffer[1600];
+    layer2 *ethdr = (layer2 *)packet_ref;
+    u_int vlan_size = 0;
+    layer3 *iphdr;
+    int iphdr_size = sizeof(layer3);
+    layer4 tcphdr;
+
+    if (ethdr->ether_type == ethdr->ether_type&"\x80\x00") {
+        printf("vlan\n");
+        vlan_size = 4;
+    } else printf("NO vlan\n");
+    
     return 0;
 }
 
@@ -361,6 +328,59 @@ int sql_get_domain(char * url_name) {
     }
     return 0;
 }
+
+// void print_packet_linear() {
+//     printf("[Ethernet]\n");
+//     printf("dstMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_dhost[0],
+//                         (*ethernet).ether_dhost[1],
+//                         ethernet->ether_dhost[2],
+//                         ethernet->ether_dhost[3],
+//                         ethernet->ether_dhost[4],
+//                         ethernet->ether_dhost[5]
+//                         );
+//     printf("srcMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_shost[0],
+//                         (*ethernet).ether_shost[1],
+//                         ethernet->ether_shost[2],
+//                         ethernet->ether_shost[3],
+//                         ethernet->ether_shost[4],
+//                         ethernet->ether_shost[5]
+//                         );
+//     printf("ethType= %x\n", ethernet->ether_type);
+//     printf("\n");
+
+//     printf("[IP]\n");
+//     printf("srcIp= %s\n", srcip);
+//     printf("dstIp= %s\n", dstip);
+//     // printf("sType= %d\n", ip->ip_tos);
+//     printf("totalLen= %hd bytes\n", ntohs(ip->ip_len));
+//     printf("headerLen= %hd bytes\n", IP_HL(ip) * 4);
+//     printf("TTL= %d\n", ip->ip_ttl);
+
+//     printf("\n");
+
+
+//     /* tcp output */
+//     printf("[TCP]\n");
+//     printf("srcPort= %d\n", ntohs(th->th_sport));
+//     printf("dstPort= %d\n", ntohs(th->th_dport));
+//     printf("seq= %u\n", ntohl(th->th_seq));
+//     printf("ack= %u\n", ntohl(th->th_ack));
+//     printf("headerLen= %d\n", TH_OFF(th) * 4);
+//     // printf("%x\n");
+//     printf("\n");
+    
+
+//     /* payload output */
+    
+//     printf("[PAYLOAD]\n");
+//     printf("%s\n", payload);
+//     printf("==================================\n\n");
+//     printf("[SQL RESULT]\n");
+//     if (sql_row != NULL) {
+//         printf("Found IP : %s\t%s\n\n", sql_row[0], sql_row[1]);
+//     } else printf("-- No IP Found --\n\n");
+//     printf("==================================\n\n");
+// }
 
 //////////////////// PACKET OUTPUT /////////////////////
 
