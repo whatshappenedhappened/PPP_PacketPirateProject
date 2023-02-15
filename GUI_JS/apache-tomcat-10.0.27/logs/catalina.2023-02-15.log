@@ -332,3 +332,8 @@
 15-Feb-2023 16:47:08.919 정보 [main] org.apache.catalina.startup.HostConfig.deployDirectory 웹 애플리케이션 디렉토리 [/UABS/UABS/GUI_JS/apache-tomcat-10.0.27/webapps/host-manager]에 대한 배치가 [55] 밀리초에 완료되었습니다.
 15-Feb-2023 16:47:08.924 정보 [main] org.apache.coyote.AbstractProtocol.start 프로토콜 핸들러 ["http-nio-80"]을(를) 시작합니다.
 15-Feb-2023 16:47:08.954 정보 [main] org.apache.catalina.startup.Catalina.start 서버가 [1844] 밀리초 내에 시작되었습니다.
+15-Feb-2023 17:12:29.411 정보 [main] org.apache.catalina.core.StandardServer.await 셧다운 포트를 통해 유효한 셧다운 명령을 받았습니다. 서버 인스턴스를 중지시킵니다.
+15-Feb-2023 17:12:29.412 정보 [main] org.apache.coyote.AbstractProtocol.pause 프로토콜 핸들러 ["http-nio-80"]을(를) 일시 정지 중
+15-Feb-2023 17:12:29.418 정보 [main] org.apache.catalina.core.StandardService.stopInternal 서비스 [Catalina]을(를) 중지시킵니다.
+15-Feb-2023 17:12:29.490 정보 [main] org.apache.coyote.AbstractProtocol.stop 프로토콜 핸들러 ["http-nio-80"]을(를) 중지시킵니다.
+15-Feb-2023 17:12:29.509 정보 [main] org.apache.coyote.AbstractProtocol.destroy 프로토콜 핸들러 ["http-nio-80"]을(를) 소멸시킵니다.

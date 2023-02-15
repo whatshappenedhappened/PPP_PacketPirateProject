@@ -16,3 +16,5 @@
 15-Feb-2023 16:47:08.595 정보 [main] org.apache.catalina.core.ApplicationContext.log ContextListener: contextInitialized()
 15-Feb-2023 16:47:08.595 정보 [main] org.apache.catalina.core.ApplicationContext.log SessionListener: contextInitialized()
 15-Feb-2023 16:47:08.600 정보 [main] org.apache.catalina.core.ApplicationContext.log ContextListener: attributeAdded('StockTicker', 'async.Stockticker@757277dc')
+15-Feb-2023 17:12:29.448 정보 [main] org.apache.catalina.core.ApplicationContext.log SessionListener: contextDestroyed()
+15-Feb-2023 17:12:29.449 정보 [main] org.apache.catalina.core.ApplicationContext.log ContextListener: contextDestroyed()
