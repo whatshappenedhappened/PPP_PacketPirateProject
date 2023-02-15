@@ -10,6 +10,7 @@
 // #define OUTPUT_MODE_EX tmi
 static int output_flag = 1;
 static int output_select = 1;
+static int frame = 1;
 
 /* STATIC VARIABLES FOR MYSQL */
 //MySQL
@@ -81,17 +82,25 @@ typedef struct sniff_tcp {
 	u_short th_sum;		/* checksum */
 	u_short th_urp;		/* urgent pointer */
 }layer4;
+
+typedef struct pseudo_header {
+    unsigned int src_ip;
+    unsigned int dst_ip;
+    unsigned char rsvd;
+    unsigned char protocol;
+    unsigned short tcp_len;
+}pseudo_header;
 ///////////////////////////////
 
 /* FUNCTION DECLARATION PART */
 DEV_IP devnet(unsigned char *);
 int devmask(bpf_u_int32);
 
+int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
+
 void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
-
-int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
 
 // void init_pcap();
 // void init_mysql();
@@ -282,15 +291,39 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     printf("YOU'RE IN sendraw()!!\n");
     char packet_buffer[1600];
     layer2 *ethdr = (layer2 *)packet_ref;
-    u_int vlan_size = 0;
+    unsigned int vlan_size = 0;
     layer3 *iphdr;
-    int iphdr_size = sizeof(layer3);
-    layer4 tcphdr;
+    unsigned int iphdr_size = sizeof(layer3);
+    layer4 *tcphdr;
+    unsigned int tcphdr_size = sizeof(layer4);
 
-    if (ethdr->ether_type == ethdr->ether_type&"\x80\x00") {
+    /* ETHERNET TYPE EXAMINATION */
+    // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
+    if (ethdr->ether_type == 0x81) {
         printf("vlan\n");
         vlan_size = 4;
-    } else printf("NO vlan\n");
+    } else if (ethdr->ether_type == 0x08) {
+        puts("normal ipv4\n");
+    }
+
+    /* TAMPERED PACKET CREATION */
+    // clean-up all the memory bytes of packet_buffer[] and bind the two header variables to it.
+    memset(packet_buffer, 0x00, 1600);
+    iphdr = (layer3 *)(packet_buffer + vlan_size);
+    tcphdr = (layer4 *)(packet_buffer + vlan_size + iphdr_size);
+
+    // htonc, htons, htonl isn't necessary because the packet_ref is already loaded as Big-Endian.
+    // and the headers we're creating here will be sent to the target network which is also Big-Endian.
+    iphdr->ip_vhl = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_vhl;
+    iphdr->ip_tos = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_tos;
+    // iphdr->ip_len = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_len;
+    iphdr->ip_id = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_id + htons(1); // should research about identification
+    // iphdr->ip_off = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_off; // 0 default
+    iphdr->ip_ttl = 64;     // I just set this as 64, don't ask me why, anyway. :(
+    iphdr->ip_p = 0x06;     // TCP == 0x06;
+    iphdr->ip_src = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_dst; // twist src ip and dst ip
+    iphdr->ip_dst = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_src; // because this will be sent to src ip from packet_ref
+    
     
     return 0;
 }
@@ -329,7 +362,8 @@ int sql_get_domain(char * url_name) {
     return 0;
 }
 
-// void print_packet_linear() {
+//////////////////// PACKET OUTPUT /////////////////////
+// void print_packet_linear(const u_char *packet, const struct pcap_pkthdr *header) {
 //     printf("[Ethernet]\n");
 //     printf("dstMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_dhost[0],
 //                         (*ethernet).ether_dhost[1],
@@ -382,9 +416,7 @@ int sql_get_domain(char * url_name) {
 //     printf("==================================\n\n");
 // }
 
-//////////////////// PACKET OUTPUT /////////////////////
-
-// void pcap_print(char *packet)
+// void print_packet_sendraw(const u_char *packet, const struct pcap_pkthdr *header) {}
 
 
 //////////////////// CUSTOMIZED IP CONVERT FUNCTION ////////////////////
