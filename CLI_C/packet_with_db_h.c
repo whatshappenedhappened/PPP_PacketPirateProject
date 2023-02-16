@@ -369,19 +369,23 @@ int sql_get_domain(char * url_name) {
 //HS가 만든 함수.
 void print_packet_hex(const unsigned char* packet, const struct pcap_pkthdr* header) {
 
+    //length > 패킷 길이 전체.
     int length = header->len;
-    int ch = 0;
+    //cnt > 갯수 세주는 변수.
+    int cnt = 0;
     int i;
     int tab_cnt = 5;
+    int space_cnt = 16;
 
-    for (i = 0; i < tab_cnt; i ++) {
-        printf("\t");
-    }
+    for (i = 0; i < tab_cnt; i ++) printf("\t");
 
-    for (i = 0; i < length; i++) {
+    for (i = 0; i < length; length--) {
+
         printf("%02x ", *packet++);
-        if ((++ch % 16) == 0) {
+
+        if ((++cnt % space_cnt) == 0) {  
             printf("\n");
+            if (*(packet + space_cnt)) printf("\t\t\t\t\t");
         }
     }
 }
