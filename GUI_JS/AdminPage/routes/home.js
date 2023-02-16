@@ -14,6 +14,10 @@ router.get('/about', function(req, res){
   res.render('home/about');
 });
 
+router.get('/test', function(req, res){
+  res.render('home/test');
+});
+
 router.get('/setting', function(req, res){
 	maria.query('SELECT * FROM tb_domains', function(err, rows, fields) {
 		if(!err) {
