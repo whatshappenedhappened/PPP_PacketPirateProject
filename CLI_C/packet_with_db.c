@@ -298,15 +298,12 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     unsigned int tcphdr_size = sizeof(layer4);
 
     // for ack num
-    layer3 *iptmp = (layer3 *)(packet_ref + SIZE_ETHERNET);
-    u_int payload_size_ref = IP_HL(iptmp) * 4;
-    printf("1 = %d\n", payload_size_ref);
-    layer4 *tcptmp = (layer4 *)packet_ref + SIZE_ETHERNET + payload_size_ref;
-    payload_size_ref += TH_OFF(tcptmp) * 4;
-    printf("2 = %d\n", payload_size_ref);
+    u_int ref_payload_size; // for ref's payload size
+    u_int ref_header_size; // ip_ref header size
+    layer3 *ip_ref; // ip_ref
+    layer4 *tcp_ref; // tcp_ref
 
-    unsigned short packet_ref_payload_size = ntohs(iptmp->ip_len) - payload_size_ref;
-    printf("ACK?? = %d\n", packet_ref_payload_size);
+    printf("+ack = %d\n", ref_payload_size);
 
     /* ETHERNET TYPE EXAMINATION */
     // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
@@ -316,6 +313,14 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     } else if (ethdr->ether_type == 0x08) {
         puts("normal ipv4\n");
     }
+
+    ip_ref = (layer3 *)(packet_ref + vlan_size + SIZE_ETHERNET); // ip_ref
+    ref_header_size = IP_HL(ip_ref) * 4; // ip_ref header size
+    tcp_ref = (layer4 *)(packet_ref + vlan_size + SIZE_ETHERNET + ref_header_size); // tcp_ref
+    ref_header_size += TH_OFF(tcp_ref) * 4; // tcp_ref header size
+    ref_payload_size = ntohs(ip_ref->ip_len) - ref_header_size; // ref_payload size
+
+    printf("+ack = %u\n", ref_payload_size);
 
     /* TAMPERED PACKET CREATION */
     // clean-up all the memory bytes of packet_buffer[] and bind the two header variables to it.
@@ -335,12 +340,14 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     iphdr->ip_src = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_dst; // twist src ip and dst ip
     iphdr->ip_dst = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_src; // because this will be sent to src ip from packet_ref
     
-    tcphdr->th_sport = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_dport; // twist src port and dst port
-    tcphdr->th_dport = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_sport; // as the same reason as the ip hdr above
-    tcphdr->th_seq = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_ack; // seq is current total payload size sent to destination of one establish
-    // tcphdr->th_ack = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_seq + ; // ack is current total payload size received from destiantion of one establish
-    // tcphdr->;
-
+    tcphdr->th_sport = tcp_ref->th_dport; // twist src port and dst port
+    tcphdr->th_dport = tcp_ref->th_sport; // as the same reason as the ip hdr above
+    tcphdr->th_seq = tcp_ref->th_ack; // seq is current total payload size sent to destination of one establish
+    tcphdr->th_ack = tcp_ref->th_seq + htonl(ref_payload_size); // ack is current total payload size received from destiantion of one establish
+    printf("temp = %u\nTam tcp_ack = %u\n", ntohl(tcp_ref->th_seq), ntohl(tcphdr->th_ack));
+    
+    
+    
     return 0;
 }
 
