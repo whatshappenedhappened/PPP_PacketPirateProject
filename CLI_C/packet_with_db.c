@@ -106,7 +106,7 @@ DEV_IP devnet(unsigned char *);
 int devmask(bpf_u_int32);
 void payloader(http_payload *);
 
-unsigned int checksum(unsigned short *, unsigned int cksum_size);
+unsigned int get_checksum(unsigned short *cksum_packet, unsigned int cksum_len);
 
 int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
 
@@ -305,9 +305,32 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     output_flag = output_select;
     
 }
+/*
+plus all the cksum_packet data as 2bytes each.
+if there is carry nibble(over 2bytes), cut the carry nibble and plus it to rest of 2bytes.
+get the 1's complement of sum.
+*/
+unsigned int get_checksum(unsigned short *cksum_packet, unsigned int cksum_len) {
+    unsigned int sum = 0;
+    unsigned int carry_nibble = 0;
+    printf("cksize = %d\n", cksum_len);
+    while (cksum_len > 1) {
+        // printf("sum = %d\tpacket = %d\t len = %d\n", sum, *cksum_packet, cksum_len);
+        sum += *cksum_packet++;
+        cksum_len -= 2;
+    }
 
-unsigned int checksum(unsigned short *cksum_packet, unsigned int cksum_size) {
+    if (cksum_len) {
+        // printf("additional\nsum = %d\tpacket = %d\t len = %d\n", sum, *(unsigned char *)cksum_packet, cksum_len);
+        sum += *cksum_packet++;
+        cksum_len--;
+    }
 
+    carry_nibble = sum >> 16;
+    sum += carry_nibble;
+    carry_nibble = sum + ~sum;
+    printf("sum = %x\nchecksum = %x\n", ~sum, carry_nibble);
+    return ~sum;
 }
 
 int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
@@ -368,6 +391,7 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     iphdr->ip_p = 0x06;     // TCP == 0x06;
     iphdr->ip_src = ip_ref->ip_dst; // twist src ip and dst ip
     iphdr->ip_dst = ip_ref->ip_src; // because this will be sent to src ip from packet_ref
+    iphdr->ip_sum = get_checksum((unsigned short *)iphdr, sizeof(layer3));
     
     // TCP header
     tcphdr->th_sport = tcp_ref->th_dport; // twist src port and dst port
@@ -388,16 +412,26 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
 
     // Pseudo hedaer and buffer for checksum
     memset(checksum_buffer, 0x00, sizeof(checksum_buffer));
+
     psd_hdr = (pseudo_header *)checksum_buffer;
     psd_hdr->s_ip = iphdr->ip_src.s_addr;   // operand is already Big-Endian
     psd_hdr->d_ip = iphdr->ip_dst.s_addr;   // operand is already Big-Endian
     psd_hdr->rsvd = 0x00;                   // this should always be 0
     psd_hdr->prtc = IPPROTO_TCP;    // IPPTORO_TCP(which is 6) is defined in in.h
     psd_hdr->tcp_len = htons(tcphdr_size + block_site.data_size);   // host to network. lengh of header + data
-    memcpy((char *)checksum_buffer + sizeof(pseudo_header), tcphdr, tcphdr_size);
-    // tcphdr->th_sum;
-
     
+    memcpy((char *)checksum_buffer + sizeof(pseudo_header), tcphdr, tcphdr_size);
+    memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size, block_site.http, block_site.http_size);
+    memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size + block_site.http_size, block_site.html, block_site.html_size);
+    
+    // is checksum should be htons?
+    tcphdr->th_sum = get_checksum((unsigned short *)checksum_buffer, sizeof(pseudo_header) + tcphdr_size + block_site.data_size);
+    printf("psd = %x\n", psd_hdr->s_ip);
+    printf("short* = %02x:%p + %02x:%p = %02x\n", checksum_buffer[0], &checksum_buffer[0], (unsigned char)*(checksum_buffer+1), (unsigned char *)(checksum_buffer+1), (unsigned short)*(unsigned short *)checksum_buffer);
+
+    // Socket creation
+    // socket();
+    // setsockopt();
     
     return 0;
 }
