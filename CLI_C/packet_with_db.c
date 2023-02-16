@@ -102,6 +102,10 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
 
+// Print function
+void print_packet_hex(const unsigned char *packet, const struct pcap_pkthdr *header);
+///////////////////
+
 // void init_pcap();
 // void init_mysql();
 
@@ -253,6 +257,9 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     char *dstbf = inet_ntoa(ip->ip_dst);
     strcpy(dstip, dstbf);
 
+                                        // 23-02-16 Appended //
+    print_packet_hex(packet, header);
+
     // MYSQL
     // char *query_string = malloc(1048);      // must be freed before the function closed
     // memset(query_string, 0x00, 1048);
@@ -353,6 +360,29 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     
     
     return 0;
+}
+
+void print_packet_hex(const unsigned char *packet, const struct pcap_pkthdr *header) {
+
+    //length > 패킷 길이 전체.
+    int length = header->len;
+    //cnt > 갯수 세주는 변수.
+    int cnt = 0;
+    int i;
+    int tab_cnt = 5;
+    int space_cnt = 16;
+
+    for (i = 0; i < tab_cnt; i ++) printf("\t");
+
+    for (i = 0; i < length; length--) {
+
+        printf("%02x ", *packet++);
+
+        if ((++cnt % space_cnt) == 0) {  
+            printf("\n");
+            if (*(packet + space_cnt)) printf("\t\t\t\t\t");
+        }
+    }
 }
 
 int sql_get_domain(char * url_name) {
