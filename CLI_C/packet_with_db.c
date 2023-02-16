@@ -294,11 +294,19 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     unsigned int vlan_size = 0;
     layer3 *iphdr;
     unsigned int iphdr_size = sizeof(layer3);
-    // unsigned int packet_ref_ip_size = ;
     layer4 *tcphdr;
     unsigned int tcphdr_size = sizeof(layer4);
-    unsigned short packet_ref_payload_size = ntohs(((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_len) /*- IP_HL((layer3 *)(packet_ref + SIZE_ETHERNET))*/;
-    
+
+    // for ack num
+    layer3 *iptmp = (layer3 *)(packet_ref + SIZE_ETHERNET);
+    u_int payload_size_ref = IP_HL(iptmp) * 4;
+    printf("1 = %d\n", payload_size_ref);
+    layer4 *tcptmp = (layer4 *)packet_ref + SIZE_ETHERNET + payload_size_ref;
+    payload_size_ref += TH_OFF(tcptmp) * 4;
+    printf("2 = %d\n", payload_size_ref);
+
+    unsigned short packet_ref_payload_size = ntohs(iptmp->ip_len) - payload_size_ref;
+    printf("ACK?? = %d\n", packet_ref_payload_size);
 
     /* ETHERNET TYPE EXAMINATION */
     // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
