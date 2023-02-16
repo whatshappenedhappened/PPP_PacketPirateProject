@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <%- include('../partials/head') %>
+  </head>
+  <body>
+    <%- include('../partials/nav') %>
+
+    <div class="container mb-3">
+    	<h2>차단 도메인 추가</h2>
+            <form action = "../../index.js" method = "post">
+		    <ul>
+		        <p> 도메인  
+		        <input type = "text" name = "name" placeholder = "도메인">
+		        </p>
+		    </ul>
+		    <p>
+		        <input type="submit" value = "입력">
+		    </p>
+            </form>
+	
+      <div class="jumbotron">
+            <table>
+		  <tr>
+		    <th>Block</th>
+		    <th>서버 IP</th>
+		    <th>차단할 도메인</th>
+		  </tr>
+		  <% log_data.forEach(item => {%>
+		  <tr>
+		  	<td><%=item.block_no%></td>
+		  	<td><%=item.ipv4%></td>
+			<td><%=item.domain_name%></td>
+                  </tr>
+                  <% }); %>
+  		 </table>
+      </div>
+
+    </div>
+  </body>
+</html>
