@@ -4,6 +4,7 @@ var passport = require('../config/passport');
 
 // require maria.js 
 const maria = require('../database/connect/maria');
+//const maria_login = require('../database/connect/maria_login');
 
 // Home
 router.get('/', function(req, res){
@@ -13,7 +14,17 @@ router.get('/about', function(req, res){
   res.render('home/about');
 });
 
-
+router.get('/setting', function(req, res){
+	maria.query('SELECT * FROM tb_domains', function(err, rows, fields) {
+		if(!err) {
+			//res.send(rows); // responses send rows
+			res.render("home/setting", { log_data: rows });
+		} else {
+	    		console.log("err : " + err);
+	    		res.send(err);  // response send err
+	  	}
+	});
+});
 
 router.get('/log', function(req, res){
 	maria.query('SELECT * FROM tb_packet_log ORDER BY created_at DESC LIMIT 10', function(err, rows, fields) {

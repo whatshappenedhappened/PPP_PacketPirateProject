@@ -5,50 +5,12 @@
   </head>
   <body>
     <%- include('../partials/nav') %>
-
+    
     <div class="container mb-3">
 
       <div class="jumbotron">
-        <h1>My Website</h1>
-	        <% var i = 0; %>
-        <P>제 웹사이트를 방문해 주<%= i %>셔서 감사합니다!</p>
-	        
-	        
-	        <% for ( i = 0; i < 5; i++ ) { %>
-	        	DEBUG: i == <%= i %> <br>
-	        <% } %>
+        <h1>관리자용 DB제어 홈페이지</h1>
 	<br>
-	<!-- 일반 HTML 문법 -->
-    	<table>
-	  <tr>
-	    <th>Month</th>
-	    <th>Savings</th>
-	  </tr>
-	  <tr>
-	    <td>1</td>
-	    <td>$100</td>
-	  </tr>
-	  <tr>
-	    <td>2</td>
-	    <td>$80</td>
-	  </tr>
-	</table>
-	
-	<br>
-<!-- Nodejs 반복문 -->
-    	<table>
-	  <tr>
-	    <th>Month</th>
-	    <th>Savings</th>
-	  </tr>
-	  <% var i = 1; %>
-	  <% for ( i = 1; i < 3; i++ ) {%>
-	  <tr>
-	    <td><%=i%></td>
-	    <td>$<%=i * 100%></td>
-	  </tr>
-	  <% } %>
-	</table>
       </div>
       
     </div>

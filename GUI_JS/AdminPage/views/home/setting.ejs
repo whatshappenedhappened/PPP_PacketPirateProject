@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <%- include('../partials/head') %>
+  </head>
+  <body>
+    <%- include('../partials/nav') %>
+
+    <div class="container mb-3">
+	
+      <div class="jumbotron">
+            <table>
+		  <tr>
+		    <th>Block</th>
+		    <th>서버 IP</th>
+		    <th>차단할 도메인</th>
+		  </tr>
+		  <% log_data.forEach(item => {%>
+		  <tr>
+		  	<td><%=item.block_no%></td>
+		  	<td><%=item.ipv4%></td>
+			<td><%=item.domain_name%></td>
+                  </tr>
+                  <% }); %>
+  		 </table>
+      </div>
+
+    </div>
+  </body>
+</html>

@@ -23,16 +23,17 @@
 		  </tr>
 		  <% log_data.forEach(item => {%>
 		  <tr>
-                  <td><%=item.id%></td>
-                  <td><%=item.src_ip%></td>
-				  <td><%=item.dst_ip%></td>
-				  <td><%=item.src_port%></td>
-				  <td><%=item.dst_port%></td>
-				  <td><%=item.domain%></td>
-				  <td><%=item.result%></td>
-				  <td><%=item.pkt_size%></td>
-				  <td><%=item.created_at%></td>
-               </tr>
+		  	
+                  	<td><%=item.id%></td>
+                  	<td><%=item.src_ip%></td>
+			<td><%=item.dst_ip%></td>
+			<td><%=item.src_port%></td>
+			<td><%=item.dst_port%></td>
+			<td><%=item.domain%></td>
+			<td><%=item.result%></td>
+			<td><%=item.pkt_size%></td>
+			<td><%=item.created_at%></td>
+                  </tr>
                   <% }); %>
   		 </table>
       </div>
