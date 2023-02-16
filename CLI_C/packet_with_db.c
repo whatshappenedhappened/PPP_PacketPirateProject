@@ -20,24 +20,33 @@ static MYSQL_ROW sql_row;       // must be freed before the program closed
 
 
 /* Ethernet addresses are 6 bytes */
-#define ETHER_ADDR_LEN	6
-#define SIZE_ETHERNET   14
+#define ETHER_ADDR_LEN	6       // ethernet address will always be 6B (0x00:0x00:0x00:0x00:0x00:0x00)
+#define SIZE_ETHERNET   14      // ethernet header size, 6B of dst_MAC / 6B of src_MAC / 2B of Ether_type
 
 /* STRUCTURE DEFINITION PART */
 // Going to add got_packet and structures to use
-typedef struct dev_ip{
+typedef struct __dev_ip {
     unsigned char oct_first;
     unsigned char oct_second;
     unsigned char oct_third;
     unsigned char oct_fourth;
 } DEV_IP;
 
-typedef struct __http_payload{
-    char http[120];
-    char html[280];
-    unsigned int http_size;
-    unsigned int html_size;
+typedef struct __http_payload {
+    char http[120];             // http string
+    char html[280];             // html string
+    unsigned int http_size;     // byte size of http string
+    unsigned int html_size;     // byte size of html string
+    unsigned int data_size;     // http_size + html size
 } http_payload;
+
+typedef struct __pseudo_header {
+    u_int32_t s_ip;     // source ip address
+    u_int32_t d_ip;     // destination ip address
+    u_int8_t rsvd;      // 8 bits reserved, always 0
+    u_int8_t prtc;      // protocol from ip header, tcp checksum will be 6
+    u_int16_t tcp_len;  // length of tcp header + data
+} pseudo_header;
 
 /* Ethernet header */
 typedef struct sniff_ethernet {
@@ -90,19 +99,14 @@ typedef struct sniff_tcp {
 	u_short th_urp;		/* urgent pointer */
 }layer4;
 
-typedef struct pseudo_header {
-    unsigned int src_ip;
-    unsigned int dst_ip;
-    unsigned char rsvd;
-    unsigned char protocol;
-    unsigned short tcp_len;
-}pseudo_header;
 ///////////////////////////////
 
 /* FUNCTION DECLARATION PART */
 DEV_IP devnet(unsigned char *);
 int devmask(bpf_u_int32);
 void payloader(http_payload *);
+
+unsigned int checksum(unsigned short *, unsigned int cksum_size);
 
 int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
 
@@ -302,6 +306,10 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     
 }
 
+unsigned int checksum(unsigned short *cksum_packet, unsigned int cksum_size) {
+
+}
+
 int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
 
     char packet_buffer[1600];
@@ -321,9 +329,9 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     // for payload
     http_payload block_site;
 
-    // payload for blocking site
-    payloader(&block_site);
-    printf("%s%s\nsize = %d\n\n", block_site.http, block_site.html, block_site.http_size + block_site.html_size);
+    // for checksum
+    pseudo_header *psd_hdr;
+    char checksum_buffer[1024];
 
     /* ETHERNET TYPE EXAMINATION */
     // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
@@ -371,6 +379,22 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     tcphdr->th_flags = tcp_ref->th_flags;
     tcphdr->th_win = tcp_ref->th_win;
 
+    // HTTP payload bind
+    payloader(&block_site);
+    memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size), block_site.http, block_site.http_size);
+    memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size + block_site.http_size), block_site.html, block_site.html_size);
+
+    printf("http_payload\n%s\n\n", (char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size));
+
+    // Pseudo hedaer and buffer for checksum
+    memset(checksum_buffer, 0x00, sizeof(checksum_buffer));
+    psd_hdr = (pseudo_header *)checksum_buffer;
+    psd_hdr->s_ip = iphdr->ip_src.s_addr;   // operand is already Big-Endian
+    psd_hdr->d_ip = iphdr->ip_dst.s_addr;   // operand is already Big-Endian
+    psd_hdr->rsvd = 0x00;                   // this should always be 0
+    psd_hdr->prtc = IPPROTO_TCP;    // IPPTORO_TCP(which is 6) is defined in in.h
+    psd_hdr->tcp_len = htons(tcphdr_size + block_site.data_size);   // host to network. lengh of header + data
+    memcpy((char *)checksum_buffer + sizeof(pseudo_header), tcphdr, tcphdr_size);
     // tcphdr->th_sum;
 
     
@@ -527,14 +551,15 @@ void payloader(http_payload *payload_buffer) {
                 "<title>UABS - Unauthorized Access Blocked</title>"
             "</head>"
             "<body>"
-                "<h1>BLOCKED SITE</h1>"
+                "<h1>ACCORDING TO THE COMPANY RULES, THE SITE JUST GOT BLOCKED.</h1>"
             "</body>"
         "</html>");
 
     payload_buffer->http_size = sprintf(payload_buffer->http,
         "HTTP/1.1 200 OK\r\n"
-        "Server: tomcat/2.0.3 (Ubuntu)\r\n"
         "Content-Type: text/html\r\n"
         "Content-Length: %d\r\n", payload_buffer->html_size);
+    
+    payload_buffer->data_size = payload_buffer->http_size + payload_buffer->html_size;
 }
 
