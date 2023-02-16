@@ -288,14 +288,17 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 }
 
 int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
-    printf("YOU'RE IN sendraw()!!\n");
+
     char packet_buffer[1600];
     layer2 *ethdr = (layer2 *)packet_ref;
     unsigned int vlan_size = 0;
     layer3 *iphdr;
     unsigned int iphdr_size = sizeof(layer3);
+    // unsigned int packet_ref_ip_size = ;
     layer4 *tcphdr;
     unsigned int tcphdr_size = sizeof(layer4);
+    unsigned short packet_ref_payload_size = ntohs(((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_len) /*- IP_HL((layer3 *)(packet_ref + SIZE_ETHERNET))*/;
+    
 
     /* ETHERNET TYPE EXAMINATION */
     // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
@@ -326,7 +329,10 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     
     tcphdr->th_sport = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_dport; // twist src port and dst port
     tcphdr->th_dport = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_sport; // as the same reason as the ip hdr above
-    
+    tcphdr->th_seq = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_ack; // seq is current total payload size sent to destination of one establish
+    // tcphdr->th_ack = ((layer4 *)(packet_ref + SIZE_ETHERNET + iphdr_size))->th_seq + ; // ack is current total payload size received from destiantion of one establish
+    // tcphdr->;
+
     return 0;
 }
 
