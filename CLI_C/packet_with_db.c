@@ -19,7 +19,7 @@ static MYSQL_ROW sql_row;       // must be freed before the program closed
 
 /* Ethernet addresses are 6 bytes */
 #define ETHER_ADDR_LEN	6
-#define SIZE_ETHERNET   14
+#define SIZE_ETHERNET  14
 
 /* STRUCTURE DEFINITION PART */
 // Going to add got_packet and structures to use
@@ -89,6 +89,17 @@ int devmask(bpf_u_int32);
 void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
+
+void print_right_numbers(const u_char *payload, int len);
+
+//new_line 함수 > 사용자가 주는 숫자에 따라서 편리하게 \t\r\n 이용 가능.
+void print_tab_line(char line, int len);
+ 
+void print_hex_ascii_line_right(const u_char* payload, int len, int offset);
+
+void print_right_numbers(const u_char* payload, int len);
+
+void print_payload_number();
 
 int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
 
@@ -182,7 +193,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "mysql_init() failed.\n");
         return 6;
     } else { func_str_len += sprintf(func_str + func_str_len, "mysql_init() OK.\n"); }
-    connection = mysql_real_connect(&conn, "localhost", "root", "root", "blocker", 3306, NULL, 0);
+    connection = mysql_real_connect(&conn, "localhost", "root", "ubuntu", "blocker", 3306, NULL, 0);
     if (connection == NULL) {
         fprintf(stderr, "mysql_real_connect() failed : %s\n", mysql_error(&conn));
         return 7;
@@ -288,6 +299,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     printf("ethType= %x\n", ethernet->ether_type);
     printf("\n");
 
+
     printf("[IP]\n");
     printf("srcIp= %s\n", srcip);
     printf("dstIp= %s\n", dstip);
@@ -296,9 +308,6 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     printf("headerLen= %hd bytes\n", IP_HL(ip) * 4);
     printf("TTL= %d\n", ip->ip_ttl);
 
-    printf("\n");
-
-
     /* tcp output */
     printf("[TCP]\n");
     printf("srcPort= %d\n", ntohs(th->th_sport));
@@ -306,20 +315,25 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     printf("seq= %u\n", ntohl(th->th_seq));
     printf("ack= %u\n", ntohl(th->th_ack));
     printf("headerLen= %d\n", TH_OFF(th) * 4);
-    // printf("%x\n");
-    printf("\n");
-    
 
+    print_payload_number(payload);
+    printf("\n\n");
+    
+    //printf("%x\n");
+    //print_payload_number(payload,2);+
+
+    print_right_numbers(payload,100);
+    
     /* payload output */
     
-    printf("[PAYLOAD]\n");
+    /*printf("[PAYLOAD]\n");
     printf("%s\n", payload);
     printf("==================================\n\n");
     printf("[SQL RESULT]\n");
     if (sql_row != NULL) {
         printf("Found IP : %s\t%s\n\n", sql_row[0], sql_row[1]);
     } else printf("-- No IP Found --\n\n");
-    printf("==================================\n\n");
+    printf("==================================\n\n");*/
     
 }
 
@@ -387,5 +401,117 @@ int devmask(bpf_u_int32 mask) {
         mask /= 2;
     }
     return cnt;
+}
+
+void print_hex_ascii_line_right(const u_char* payload, int len, int offset){
+	int i;
+	int space = 0;
+	int tabs_cnt = 6;
+	/* 앞쪽 탭 6번. */
+	for ( i = 0 ; i < tabs_cnt ; i++ ) {
+		printf("\t");
+	}
+
+	/* 처음부터 주어진 요소나 지점까지의 변위차를 나타내는 정수형 */
+	printf("%05d   ", offset);
+
+	/* 16진수 값 출력. */
+	for(i = 0; i < len; i++) {
+		printf("%02x ", *payload);
+		payload++;
+		
+		if (i == 7)
+			printf(" ");
+	}
+	
+	if (len < 8)
+		printf(" ");
+
+	if (len < 16) {
+		space = 16 - len;
+		for (i = 0; i < space; i++) {
+			printf("   ");
+		}
+	}
+    printf("   ");
+
+	//isprint함수 > 인쇄 가능한 문자인지 확인하는 함수.
+    //16진수를 ascii 코드값으로 변환. > 인쇄 가능하지 않으면 (.문자 출력)
+	for(i = 0; i < len; i++) {
+		if (isprint(*payload))
+			printf("%c", *payload);
+		else
+			printf(".");
+		payload++;
+	}
+
+	printf("\n");
+
+	return;
+}
+
+void print_right_numbers(const u_char* payload, int len) {
+	int len_rem = len;
+	int line_width = 16;			/* number of bytes per line */
+	int line_len = 0;
+	int offset = 0;					/* zero-based offset counter */
+
+	if (len <= 0)
+		return;
+
+	/* 데이터가 한 줄에 적합 */
+	if (len <= line_width) {
+		print_hex_ascii_line_right(payload, len, offset);
+		return;
+	}
+
+	/* 데이터가 여러 줄에 걸쳐 있는 라인 */
+	while ( 1 ) {
+		/* 현재 줄 길이 계산 */
+		line_len = line_width % len_rem;
+		/* 출력 라인 */
+		print_hex_ascii_line_right(payload, line_len, offset);
+		/* 남은 전체를 계산 */
+		len_rem = len_rem - line_len;
+		/* 인쇄할 나머지 바이트로 포인터 이동 */
+		payload = payload + line_len;
+		/* 오프셋 추가 */
+		offset = offset + line_width;
+		/* 줄 너비 문자 이하인지 확인 */
+		if (len_rem <= line_width) {
+			print_hex_ascii_line_right(payload, len_rem, offset);
+			break;
+		}
+		//오류시.
+		if ( offset > 600 ) {
+			print_tab_line('\t',6);
+			printf("payload too long\n");
+			break;
+		}
+	}
+
+    return;
+}
+
+void print_tab_line(char line, int len)
+{
+	int i;
+	for ( i = 0; i < len ; i++) {
+		printf("%c",line);
+	}
+}
+void print_payload_number() {
+
+    int i;
+    int row_line[16] = {};
+    int size = sizeof(row_line) / sizeof(row_line[0]);
+    print_tab_line('\t',7);
+    
+    for(i = 0; i < size; i++) {
+		printf("%02d ", i);
+
+		if (i == 7)
+			printf(" ");
+	}
 }
 ////////////////////////////////////////////////////////////////////////
