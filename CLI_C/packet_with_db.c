@@ -303,8 +303,6 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     layer3 *ip_ref; // ip_ref
     layer4 *tcp_ref; // tcp_ref
 
-    printf("+ack = %d\n", ref_payload_size);
-
     /* ETHERNET TYPE EXAMINATION */
     // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
     if (ethdr->ether_type == 0x81) {
@@ -321,6 +319,7 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     ref_payload_size = ntohs(ip_ref->ip_len) - ref_header_size; // ref_payload size
 
     printf("+ack = %u\n", ref_payload_size);
+    printf("offx2 = %x\nflags = %x\n", tcp_ref->th_offx2, tcp_ref->th_flags);
 
     /* TAMPERED PACKET CREATION */
     // clean-up all the memory bytes of packet_buffer[] and bind the two header variables to it.
@@ -328,6 +327,7 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     iphdr = (layer3 *)(packet_buffer + vlan_size);
     tcphdr = (layer4 *)(packet_buffer + vlan_size + iphdr_size);
 
+    // IP header
     // htonc, htons, htonl isn't necessary because the packet_ref is already loaded as Big-Endian.
     // and the headers we're creating here will be sent to the target network which is also Big-Endian.
     iphdr->ip_vhl = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_vhl;
@@ -340,12 +340,16 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     iphdr->ip_src = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_dst; // twist src ip and dst ip
     iphdr->ip_dst = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_src; // because this will be sent to src ip from packet_ref
     
+    // TCP header
     tcphdr->th_sport = tcp_ref->th_dport; // twist src port and dst port
     tcphdr->th_dport = tcp_ref->th_sport; // as the same reason as the ip hdr above
     tcphdr->th_seq = tcp_ref->th_ack; // seq is current total payload size sent to destination of one establish
     tcphdr->th_ack = tcp_ref->th_seq + htonl(ref_payload_size); // ack is current total payload size received from destiantion of one establish
     printf("temp = %u\nTam tcp_ack = %u\n", ntohl(tcp_ref->th_seq), ntohl(tcphdr->th_ack));
-    
+    tcphdr->th_offx2 = tcp_ref->th_offx2;
+    tcphdr->th_flags = tcp_ref->th_flags;
+    tcphdr->th_win = tcp_ref->th_win;
+
     
     
     return 0;
