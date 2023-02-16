@@ -32,6 +32,13 @@ typedef struct dev_ip{
     unsigned char oct_fourth;
 } DEV_IP;
 
+typedef struct __http_payload{
+    char http[120];
+    char html[280];
+    unsigned int http_size;
+    unsigned int html_size;
+} http_payload;
+
 /* Ethernet header */
 typedef struct sniff_ethernet {
 	u_char ether_dhost[ETHER_ADDR_LEN]; /* Destination host address */
@@ -95,6 +102,7 @@ typedef struct pseudo_header {
 /* FUNCTION DECLARATION PART */
 DEV_IP devnet(unsigned char *);
 int devmask(bpf_u_int32);
+void payloader(http_payload *);
 
 int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
 
@@ -258,7 +266,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     strcpy(dstip, dstbf);
 
                                         // 23-02-16 Appended //
-    print_packet_hex(packet, header);
+    // print_packet_hex(packet, header);
 
     // MYSQL
     // char *query_string = malloc(1048);      // must be freed before the function closed
@@ -273,7 +281,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         memcpy(url_name, find_host, url_size);
         printf("URL : %s\n", url_name);
         sql_get_flag = sql_get_domain(url_name);
-        printf("sql_get_flag = %d\n", sql_get_flag);
+        printf("sql_get_flag = %d\n\n\n", sql_get_flag);
     }
 
     if (sql_get_flag == 1) {
@@ -310,13 +318,19 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     layer3 *ip_ref; // ip_ref
     layer4 *tcp_ref; // tcp_ref
 
+    // for payload
+    http_payload block_site;
+
+    // payload for blocking site
+    payloader(&block_site);
+    printf("%s%s\nsize = %d\n\n", block_site.http, block_site.html, block_site.http_size + block_site.html_size);
+
     /* ETHERNET TYPE EXAMINATION */
     // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
     if (ethdr->ether_type == 0x81) {
-        printf("vlan\n");
         vlan_size = 4;
     } else if (ethdr->ether_type == 0x08) {
-        puts("normal ipv4\n");
+        vlan_size = 0;
     }
 
     ip_ref = (layer3 *)(packet_ref + vlan_size + SIZE_ETHERNET); // ip_ref
@@ -337,15 +351,15 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     // IP header
     // htonc, htons, htonl isn't necessary because the packet_ref is already loaded as Big-Endian.
     // and the headers we're creating here will be sent to the target network which is also Big-Endian.
-    iphdr->ip_vhl = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_vhl;
-    iphdr->ip_tos = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_tos;
-    // iphdr->ip_len = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_len;
-    iphdr->ip_id = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_id + htons(1); // should research about identification
-    // iphdr->ip_off = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_off; // 0 default
+    iphdr->ip_vhl = ip_ref->ip_vhl;
+    iphdr->ip_tos = ip_ref->ip_tos;
+    // iphdr->ip_len = ip_ref->ip_len;
+    iphdr->ip_id = ip_ref->ip_id + htons(1); // should research about identification
+    // iphdr->ip_off = ip_ref->ip_off; // 0 default
     iphdr->ip_ttl = 64;     // I just set this as 64, don't ask me why, anyway. :(
     iphdr->ip_p = 0x06;     // TCP == 0x06;
-    iphdr->ip_src = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_dst; // twist src ip and dst ip
-    iphdr->ip_dst = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_src; // because this will be sent to src ip from packet_ref
+    iphdr->ip_src = ip_ref->ip_dst; // twist src ip and dst ip
+    iphdr->ip_dst = ip_ref->ip_src; // because this will be sent to src ip from packet_ref
     
     // TCP header
     tcphdr->th_sport = tcp_ref->th_dport; // twist src port and dst port
@@ -356,6 +370,8 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     tcphdr->th_offx2 = tcp_ref->th_offx2;
     tcphdr->th_flags = tcp_ref->th_flags;
     tcphdr->th_win = tcp_ref->th_win;
+
+    // tcphdr->th_sum;
 
     
     
@@ -498,3 +514,27 @@ int devmask(bpf_u_int32 mask) {
     return cnt;
 }
 ////////////////////////////////////////////////////////////////////////
+
+/*
+payloader() take-up a pointer of http_payload type variable.
+the function creates a structure for the http packet payload.
+*/
+void payloader(http_payload *payload_buffer) {
+    payload_buffer->html_size = sprintf(payload_buffer->html,
+        "<!DOCTYPE html>"
+        "<html>"
+            "<head>"
+                "<title>UABS - Unauthorized Access Blocked</title>"
+            "</head>"
+            "<body>"
+                "<h1>BLOCKED SITE</h1>"
+            "</body>"
+        "</html>");
+
+    payload_buffer->http_size = sprintf(payload_buffer->http,
+        "HTTP/1.1 200 OK\r\n"
+        "Server: tomcat/2.0.3 (Ubuntu)\r\n"
+        "Content-Type: text/html\r\n"
+        "Content-Length: %d\r\n", payload_buffer->html_size);
+}
+
