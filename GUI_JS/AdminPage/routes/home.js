@@ -14,10 +14,6 @@ router.get('/about', function(req, res){
   res.render('home/about');
 });
 
-router.get('/test', function(req, res){
-  res.render('home/test');
-});
-
 router.get('/setting', function(req, res){
 	maria.query('SELECT * FROM tb_domains', function(err, rows, fields) {
 		if(!err) {
@@ -28,6 +24,23 @@ router.get('/setting', function(req, res){
 	    		res.send(err);  // response send err
 	  	}
 	});
+});
+
+router.post('/setting', function(req, res){
+//setting.ejs에서 form태그의 post방식으로 데이터를 받는다.
+    var domain = req.body.domain;	//request 객체의 body객체의 title값.
+    var sql = 'INSERT INTO tb_domains (domain_name) VALUES(?)';
+    //VALUES의 물음표는 query함수의 두번째 인자.
+    maria.query(sql, domain, function(err, result, fields){
+    //인자로 sql문, Value, 함수 전달.
+        if(err) {
+          console.log(err); //에러가 있다면, 보안을 위해 콘솔에 err로그를 찍고,
+          res.status(500).send('Internal Server Error'); //사용자에게는 err로그를 보여주지 않는다.
+        }
+        console.log(domain+' 추가 성공');//데이터가 db에 잘 저장 되었다면, 콘솔에 성공이라 찍는다.
+        res.redirect('/setting');
+        //setting 페이지 새로고침
+    });
 });
 
 router.get('/log', function(req, res){
@@ -41,7 +54,8 @@ router.get('/log', function(req, res){
 	  	}
 	});
 });
-
+// DB INSERT
+router.post 
 // Login
 router.get('/login', function (req,res) {
   var username = req.flash('username')[0];
