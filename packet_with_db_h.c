@@ -8,7 +8,9 @@
 // FOR OUTPUT OPTION //
 // #define OUTPUT_MODE o_mode      // how the hell can i make this work
 // #define OUTPUT_MODE_EX tmi
-static output_flag = 1;
+static int output_flag = 1;
+static int output_select = 1;
+static int frame = 1;
 
 /* STATIC VARIABLES FOR MYSQL */
 //MySQL
@@ -19,7 +21,7 @@ static MYSQL_ROW sql_row;       // must be freed before the program closed
 
 /* Ethernet addresses are 6 bytes */
 #define ETHER_ADDR_LEN	6
-#define SIZE_ETHERNET  14
+#define SIZE_ETHERNET   14
 
 /* STRUCTURE DEFINITION PART */
 // Going to add got_packet and structures to use
@@ -80,6 +82,14 @@ typedef struct sniff_tcp {
 	u_short th_sum;		/* checksum */
 	u_short th_urp;		/* urgent pointer */
 }layer4;
+
+typedef struct pseudo_header {
+    unsigned int src_ip;
+    unsigned int dst_ip;
+    unsigned char rsvd;
+    unsigned char protocol;
+    unsigned short tcp_len;
+}pseudo_header;
 ///////////////////////////////
 
 /* FUNCTION DECLARATION PART */
@@ -87,13 +97,15 @@ DEV_IP devnet(unsigned char *);
 
 int devmask(bpf_u_int32);
 
+int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
+
 void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
 
-void print_packet_hex(const u_char *packet, const struct pcap_pkthdr *header);
-
-int sql_get_domain(char *url_name);    // returns 1 on matched url found, 0 on no url found
+// Print function
+void print_packet_hex(const u_char* packet, const struct pcap_pkthdr* header);
+///////////////////
 
 // void init_pcap();
 // void init_mysql();
@@ -132,19 +144,21 @@ int main(int argc, char *argv[]) {
     /* OUTPUT MODE */
     if (argc > 1 && argv[1]) {      // 실행시 입력값에 따라 상수 매크로의 값을 조절, -a는 모두 출력, 기본은 1
         if(strstr(argv[1], "-a") != NULL) {
-            output_flag = 1;
+            output_select = 1;
+            output_flag = output_select;
             o_output = "A Friendly Neighbor";
         } else if (strstr(argv[1], "-h") != NULL) {
-            output_flag = 0;
+            output_select = 0;
+            output_flag = output_select;
             o_output = "Hitman";
         }
     }
     printf("Callsign = \" %s \"\n", o_output);
 
+
     if (pcap_findalldevs(&dev, errbuf) == PCAP_ERROR) {
         printf("pcap_findalldevs() failed : %s\n", errbuf);
         return 1;
-
     } else {
         devc = dev->name;
         func_str_len = sprintf(func_str, "pcap_findalldevs() OK.\t\t\t[ Device ]\t%s\n", devc);
@@ -185,7 +199,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "mysql_init() failed.\n");
         return 6;
     } else { func_str_len += sprintf(func_str + func_str_len, "mysql_init() OK.\n"); }
-    connection = mysql_real_connect(&conn, "localhost", "root", "ubuntu", "blocker", 3306, NULL, 0);
+    connection = mysql_real_connect(&conn, "localhost", "root", "root", "blocker", 3306, NULL, 0);
     if (connection == NULL) {
         fprintf(stderr, "mysql_real_connect() failed : %s\n", mysql_error(&conn));
         return 7;
@@ -194,14 +208,16 @@ int main(int argc, char *argv[]) {
     if (output_flag > 0)
         printf("%s", func_str);
 
+
     printf("\n\n");
 
     // packet = pcap_next(handle, &header);
     // printf("Packet just got jacked : [%d]bytes\n", header.len);
 
     // PCAP LOOP //
-    pcap_loop(handle, p_loop_cnt, got_packet, NULL);
+    pcap_loop(handle, 0, got_packet, NULL);
     // --------- //
+
 
     // PCAP CLOSE
     if (handle != NULL) {
@@ -242,6 +258,9 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     char *dstbf = inet_ntoa(ip->ip_dst);
     strcpy(dstip, dstbf);
 
+    // 23-02-16 Appended //
+    print_packet_hex(packet, header);
+
     // MYSQL
     // char *query_string = malloc(1048);      // must be freed before the function closed
     // memset(query_string, 0x00, 1048);
@@ -257,6 +276,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         sql_get_flag = sql_get_domain(url_name);
         printf("sql_get_flag = %d\n", sql_get_flag);
     }
+
     if (sql_get_flag == 1) {
         sendraw(packet, header);
     }
@@ -270,66 +290,123 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 
     // every data from packet will be stored as big-endian way except the type of char(1 byte)
     /* ethernet output */
-    
-    printf("[Ethernet]\n");
-    printf("dstMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_dhost[0],
-                        (*ethernet).ether_dhost[1],
-                        ethernet->ether_dhost[2],
-                        ethernet->ether_dhost[3],
-                        ethernet->ether_dhost[4],
-                        ethernet->ether_dhost[5]
-                        );
-    printf("srcMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_shost[0],
-                        (*ethernet).ether_shost[1],
-                        ethernet->ether_shost[2],
-                        ethernet->ether_shost[3],
-                        ethernet->ether_shost[4],
-                        ethernet->ether_shost[5]
-                        );
-    printf("ethType= %x\n", ethernet->ether_type);
-    printf("\n");
-    printf("[IP]\n");
-    printf("srcIp= %s\n", srcip);
-    printf("dstIp= %s\n", dstip);
-    // printf("sType= %d\n", ip->ip_tos);
-    printf("totalLen= %hd bytes\n", ntohs(ip->ip_len));
-    printf("headerLen= %hd bytes\n", IP_HL(ip) * 4);
-    printf("TTL= %d\n", ip->ip_ttl);
-    printf("\n");
 
-    /* tcp output */
-    printf("[TCP]\n");
-    printf("srcPort= %d\n", ntohs(th->th_sport));
-    printf("dstPort= %d\n", ntohs(th->th_dport));
-    printf("seq= %u\n", ntohl(th->th_seq));
-    printf("ack= %u\n", ntohl(th->th_ack));
-    printf("headerLen= %d\n", TH_OFF(th) * 4);
-    printf("\n"); 
-
- /* struct pcap_pkthdr {
-	struct timeval ts;	> time stamp [타임 스템프] 
-	bpf_u_int32 caplen;	> length of portion present [현재 위치 까지의 길이]
-	bpf_u_int32 len;	> length this packet (off wire) [패킷 전체의 길이] */
-
-    /* payload output */
-    print_packet_hex(packet, header);
-
-    printf("\n");
-    printf("[byte : %d]", header->caplen);
-    printf("[PAYLOAD]\n");
-    printf("%s", payload);
-    printf("==================================\n\n");
-    printf("[SQL RESULT]\n");
-    if (sql_row != NULL) {
-        printf("Found IP : %s\t%s\n\n", sql_row[0], sql_row[1]);
-    } else printf("-- No IP Found --\n\n");
-    printf("==================================\n\n");
+    output_flag = output_select;
     
 }
 
-int sendraw(const u_char *packet, const struct pcap_pkthdr *header) {
-    printf("YOU'RE IN sendraw()!!\n");
+int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
+
+    char packet_buffer[1600];
+    layer2 *ethdr = (layer2 *)packet_ref;
+    unsigned int vlan_size = 0;
+    layer3 *iphdr;
+    unsigned int iphdr_size = sizeof(layer3);
+    layer4 *tcphdr;
+    unsigned int tcphdr_size = sizeof(layer4);
+
+    // for ack num
+    u_int ref_payload_size; // for ref's payload size
+    u_int ref_header_size; // ip_ref header size
+    layer3 *ip_ref; // ip_ref
+    layer4 *tcp_ref; // tcp_ref
+
+    /* ETHERNET TYPE EXAMINATION */
+    // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
+    if (ethdr->ether_type == 0x81) {
+        printf("vlan\n");
+        vlan_size = 4;
+    } else if (ethdr->ether_type == 0x08) {
+        puts("normal ipv4\n");
+    }
+
+    ip_ref = (layer3 *)(packet_ref + vlan_size + SIZE_ETHERNET); // ip_ref
+    ref_header_size = IP_HL(ip_ref) * 4; // ip_ref header size
+    tcp_ref = (layer4 *)(packet_ref + vlan_size + SIZE_ETHERNET + ref_header_size); // tcp_ref
+    ref_header_size += TH_OFF(tcp_ref) * 4; // tcp_ref header size
+    ref_payload_size = ntohs(ip_ref->ip_len) - ref_header_size; // ref_payload size
+
+    printf("+ack = %u\n", ref_payload_size);
+    printf("offx2 = %x\nflags = %x\n", tcp_ref->th_offx2, tcp_ref->th_flags);
+
+    /* TAMPERED PACKET CREATION */
+    // clean-up all the memory bytes of packet_buffer[] and bind the two header variables to it.
+    memset(packet_buffer, 0x00, 1600);
+    iphdr = (layer3 *)(packet_buffer + vlan_size);
+    tcphdr = (layer4 *)(packet_buffer + vlan_size + iphdr_size);
+
+    // IP header
+    // htonc, htons, htonl isn't necessary because the packet_ref is already loaded as Big-Endian.
+    // and the headers we're creating here will be sent to the target network which is also Big-Endian.
+    iphdr->ip_vhl = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_vhl;
+    iphdr->ip_tos = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_tos;
+    // iphdr->ip_len = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_len;
+    iphdr->ip_id = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_id + htons(1); // should research about identification
+    // iphdr->ip_off = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_off; // 0 default
+    iphdr->ip_ttl = 64;     // I just set this as 64, don't ask me why, anyway. :(
+    iphdr->ip_p = 0x06;     // TCP == 0x06;
+    iphdr->ip_src = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_dst; // twist src ip and dst ip
+    iphdr->ip_dst = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_src; // because this will be sent to src ip from packet_ref
+    
+    // TCP header
+    tcphdr->th_sport = tcp_ref->th_dport; // twist src port and dst port
+    tcphdr->th_dport = tcp_ref->th_sport; // as the same reason as the ip hdr above
+    tcphdr->th_seq = tcp_ref->th_ack; // seq is current total payload size sent to destination of one establish
+    tcphdr->th_ack = tcp_ref->th_seq + htonl(ref_payload_size); // ack is current total payload size received from destiantion of one establish
+    printf("temp = %u\nTam tcp_ack = %u\n", ntohl(tcp_ref->th_seq), ntohl(tcphdr->th_ack));
+    tcphdr->th_offx2 = tcp_ref->th_offx2;
+    tcphdr->th_flags = tcp_ref->th_flags;
+    tcphdr->th_win = tcp_ref->th_win;
+
     return 0;
+}
+
+void print_packet_hex(const u_char* packet, const struct pcap_pkthdr* header) {	
+	
+	//packet > 패킷 데이터
+	//byte_len > 패킷 전체의 길이
+	int i;
+    int byte_len = header->len;
+
+    //1460byte 선언
+	u_char buff[1460];
+
+	// 데이터의 길이를 보여준다.
+	for (i = 0; i < byte_len; i++)
+	{
+		// 16의 배수는 새 줄(줄 오프셋 있음)을 의미
+		if ((i % 16) == 0)
+		{
+			//0번째 줄에 ASCII를 인쇄를 안함.
+			if (i != 0) {
+				printf("  %s\n", buff);
+			}
+			// 입출력 바이트.
+			printf("  \t\t\t\t%04x ", i);
+		}
+
+		// AB CD D2 A3 5B B3 A4 C2  > 아스키 코드를 16진수(정수)로 나열.
+		printf(" %02x", packet[i]);
+
+        // 아스키코드 32 ~ 126 (10진수로)
+            //32                //126, 127은 DEL문자
+		if ((packet[i] < 0x20) || (packet[i] > 0x7e)) {
+			buff[i % 16] = '.';  
+		} else {
+			buff[i % 16] = packet[i];
+		}
+
+		buff[(i % 16) + 1] = '\0';
+	}
+
+	// 16진수가 아니면 마지막 줄을 펼침.
+	while ((i % 16) != 0) {
+		printf("   ");
+		i++;
+	}
+
+	printf("  %s\n", buff);
+    //printf("[byte : %d]",byte_len);
 }
 
 int sql_get_domain(char * url_name) {
@@ -349,6 +426,7 @@ int sql_get_domain(char * url_name) {
     if ((sql_result = mysql_store_result(connection)) != NULL) {
        puts("OK : SQL result stored.");
     } else {
+
         return 0;
     }
 
@@ -366,43 +444,61 @@ int sql_get_domain(char * url_name) {
     return 0;
 }
 
-//HS가 만든 함수.
-void print_packet_hex(const unsigned char* packet, const struct pcap_pkthdr* header) {
-
-    //length > 패킷 길이 전체.
-    int length = header->len;
-    //cnt > 갯수 세주는 변수.
-    int cnt = 0;
-    int i;
-    int tab_cnt = 5;
-    int space_cnt = 16;
-
-    for (i = 0; i < tab_cnt; i ++) printf("\t");
-
-    for (i = 0; i < length; length--) {
-
-        printf("%02x ", *packet++);
-
-        if ((++cnt % space_cnt) == 0) {  
-            printf("\n");
-            if (*(packet + space_cnt)) printf("\t\t\t\t\t");
-        }
-    }
-}
-
-    /*while(length--) {
-        printf("%02x ", *packet++);
-        if ((++ch % 16) == 0) {
-            printf("\n");
-        }
-    }*/
-
-         
-
-
 //////////////////// PACKET OUTPUT /////////////////////
+// void print_packet_linear(const u_char *packet, const struct pcap_pkthdr *header) {
+//     printf("[Ethernet]\n");
+//     printf("dstMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_dhost[0],
+//                         (*ethernet).ether_dhost[1],
+//                         ethernet->ether_dhost[2],
+//                         ethernet->ether_dhost[3],
+//                         ethernet->ether_dhost[4],
+//                         ethernet->ether_dhost[5]
+//                         );
+//     printf("srcMac= %02x:%02x:%02x:%02x:%02x:%02x\n", ethernet->ether_shost[0],
+//                         (*ethernet).ether_shost[1],
+//                         ethernet->ether_shost[2],
+//                         ethernet->ether_shost[3],
+//                         ethernet->ether_shost[4],
+//                         ethernet->ether_shost[5]
+//                         );
+//     printf("ethType= %x\n", ethernet->ether_type);
+//     printf("\n");
 
-// void pcap_print(char *packet)
+//     printf("[IP]\n");
+//     printf("srcIp= %s\n", srcip);
+//     printf("dstIp= %s\n", dstip);
+//     // printf("sType= %d\n", ip->ip_tos);
+//     printf("totalLen= %hd bytes\n", ntohs(ip->ip_len));
+//     printf("headerLen= %hd bytes\n", IP_HL(ip) * 4);
+//     printf("TTL= %d\n", ip->ip_ttl);
+
+//     printf("\n");
+
+
+//     /* tcp output */
+//     printf("[TCP]\n");
+//     printf("srcPort= %d\n", ntohs(th->th_sport));
+//     printf("dstPort= %d\n", ntohs(th->th_dport));
+//     printf("seq= %u\n", ntohl(th->th_seq));
+//     printf("ack= %u\n", ntohl(th->th_ack));
+//     printf("headerLen= %d\n", TH_OFF(th) * 4);
+//     // printf("%x\n");
+//     printf("\n");
+    
+
+//     /* payload output */
+    
+//     printf("[PAYLOAD]\n");
+//     printf("%s\n", payload);
+//     printf("==================================\n\n");
+//     printf("[SQL RESULT]\n");
+//     if (sql_row != NULL) {
+//         printf("Found IP : %s\t%s\n\n", sql_row[0], sql_row[1]);
+//     } else printf("-- No IP Found --\n\n");
+//     printf("==================================\n\n");
+// }
+
+// void print_packet_sendraw(const u_char *packet, const struct pcap_pkthdr *header) {}
 
 
 //////////////////// CUSTOMIZED IP CONVERT FUNCTION ////////////////////
@@ -426,5 +522,4 @@ int devmask(bpf_u_int32 mask) {
     }
     return cnt;
 }
-		
 ////////////////////////////////////////////////////////////////////////
