@@ -7,11 +7,18 @@
     <%- include('../partials/nav') %>
 
     <div class="container mb-3">
-    	<h2>차단 도메인 추가</h2>
             <form action = "/setting" method = "post">
 		    <ul>
 		        <p> 입력해주세요  
-		        <input type = "text" name = "domain" placeholder = "도메인">
+		        <input type = "text" name = "Ins_domain" placeholder = "도메인">
+		        <input type="submit" value = "입력">
+		        </p>
+		    </ul>
+            </form>
+            <form action = "/setting" method = "post">
+		    <ul>
+		        <p> 입력해주세요  
+		        <input type = "text" name = "Del_domain" placeholder = "도메인">
 		        <input type="submit" value = "입력">
 		        </p>
 		    </ul>
