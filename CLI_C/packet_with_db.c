@@ -4,6 +4,10 @@
 #include <string.h>
 #include <mariadb/mysql.h>
 #include <stdlib.h>
+#include <sys/socket.h> // guess this is already included at some header
+
+char global_dev[] = "lo";
+int global_dev_len = 2;
 
 // FOR OUTPUT OPTION //
 // #define OUTPUT_MODE o_mode      // how the hell can i make this work
@@ -168,7 +172,7 @@ int main(int argc, char *argv[]) {
     }
     printf("Callsign = \" %s \"\n", o_output);
 
-
+    
     if (pcap_findalldevs(&dev, errbuf) == PCAP_ERROR) {
         printf("pcap_findalldevs() failed : %s\n", errbuf);
         return 1;
@@ -176,6 +180,7 @@ int main(int argc, char *argv[]) {
         devc = dev->name;
         func_str_len = sprintf(func_str, "pcap_findalldevs() OK.\t\t\t[ Device ]\t%s\n", devc);
     }
+    devc = "lo";
     
     if (pcap_lookupnet(devc, &net, &mask, errbuf) == PCAP_ERROR) {
         printf("pcap_lookupnet() failed : %s\n", errbuf);
@@ -226,7 +231,6 @@ int main(int argc, char *argv[]) {
 
     // packet = pcap_next(handle, &header);
     // printf("Packet just got jacked : [%d]bytes\n", header.len);
-
     // PCAP LOOP //
     pcap_loop(handle, 0, got_packet, NULL);
     // --------- //
@@ -263,6 +267,8 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     char url_name[512];
     char *url_from_db = NULL;
     int sql_get_flag = 0;
+    int sendraw_result = 0; // 1 on success, 0 on fail
+    printf("*th->tcp_off = %x\n", th->th_offx2);
 
     /* ip output variables */
     char srcip[16], dstip[16];
@@ -277,7 +283,6 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     // MYSQL
     // char *query_string = malloc(1048);      // must be freed before the function closed
     // memset(query_string, 0x00, 1048);
-
     // FINDING HOST
     memset(url_name, 0x00, sizeof(url_name));
     find_host = strstr(payload, "Host:");
@@ -291,8 +296,12 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     }
 
     if (sql_get_flag == 1) {
-        sendraw(packet, header);
+        sendraw_result = sendraw(packet, header);
     }
+    if (sql_get_flag == 1 && sendraw_result == 1) {
+        sendraw_result = 0;
+        puts("\n--- sendraw success ---\n");
+    } else if (sql_get_flag == 1 && sendraw_result == 1) { puts("\n--- sendraw failed ---\n"); }
     // sendraw(packet, header);
 
     // Query
@@ -344,6 +353,8 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     unsigned int iphdr_size = sizeof(layer3);
     layer4 *tcphdr;
     unsigned int tcphdr_size = sizeof(layer4);
+    int ret_value = 0;
+    unsigned int hdr_size_total = 0;
 
     // for ack num
     u_int ref_payload_size; // for ref's payload size
@@ -357,6 +368,12 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     // for checksum
     pseudo_header *psd_hdr;
     char checksum_buffer[1024];
+
+    // for raw socket
+    int socket_raw;
+    int socket_opt_value = 1;
+    ssize_t sendto_result = 0;
+    struct sockaddr_in target_addr;
 
     /* ETHERNET TYPE EXAMINATION */
     // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
@@ -380,6 +397,8 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     memset(packet_buffer, 0x00, 1600);
     iphdr = (layer3 *)(packet_buffer + vlan_size);
     tcphdr = (layer4 *)(packet_buffer + vlan_size + iphdr_size);
+    hdr_size_total = sizeof(layer3) + sizeof(layer4) + vlan_size;
+    printf("hdr_size_total = %d\n", hdr_size_total);
 
     // IP header
     // htonc, htons, htonl isn't necessary because the packet_ref is already loaded as Big-Endian.
@@ -388,7 +407,7 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     iphdr->ip_tos = ip_ref->ip_tos;
     // iphdr->ip_len = ip_ref->ip_len;
     iphdr->ip_id = ip_ref->ip_id + htons(1); // should research about identification
-    // iphdr->ip_off = ip_ref->ip_off; // 0 default
+    iphdr->ip_off = ip_ref->ip_off; // IP_DF default
     iphdr->ip_ttl = 64;     // I just set this as 64, don't ask me why, anyway. :(
     iphdr->ip_p = 0x06;     // TCP == 0x06;
     iphdr->ip_src = ip_ref->ip_dst; // twist src ip and dst ip
@@ -401,16 +420,65 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     tcphdr->th_seq = tcp_ref->th_ack; // seq is current total payload size sent to destination of one establish
     tcphdr->th_ack = tcp_ref->th_seq + htonl(ref_payload_size); // ack is current total payload size received from destiantion of one establish
     printf("temp = %u\nTam tcp_ack = %u\n", ntohl(tcp_ref->th_seq), ntohl(tcphdr->th_ack));
-    tcphdr->th_offx2 = tcp_ref->th_offx2;
-    tcphdr->th_flags = tcp_ref->th_flags;
-    tcphdr->th_win = tcp_ref->th_win;
+    tcphdr->th_offx2 = 0x50;
+    printf("th_reflen = %x\n\n", tcp_ref->th_offx2);
+    printf("th_offlen = %x\n\n", tcphdr->th_offx2);
+    tcphdr->th_flags = tcp_ref->th_flags + TH_FIN;
+    // tcphdr->th_win = tcp_ref->th_win;
+    tcphdr->th_win = ((layer4 *)(packet_ref + vlan_size + 14 + 20))->th_win;
 
-    // HTTP payload bind
-    payloader(&block_site);
-    memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size), block_site.http, block_site.http_size);
-    memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size + block_site.http_size), block_site.html, block_site.html_size);
+    // HTTP + HTML payload bind
+    // payloader(&block_site);
+    // memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size), block_site.http, block_site.http_size);
+    // memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size + block_site.http_size), block_site.html, block_site.html_size);
 
-    printf("http_payload\n%s\n\n", (char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size));
+    // int http_size;
+    // int html_size;
+    // int pay_size;
+    // char http_temp[512];
+    // char html_temp[512];
+    // html_size = sprintf(html_temp,
+    //     "<html>\r\n"
+    //         "<head>\r\n"
+    //             "<meta charset=\"UTF-8\">\r\n"
+    //             "<title>UABS - Unauthorized Access Blocked</title>\r\n"
+    //         "</head>\r\n"
+    //         "<body>\r\n"
+    //             "<h1>ACCORDING TO THE COMPANY RULES, THE SITE JUST GOT BLOCKED.</h1>\r\n"
+    //         "</body>\r\n"
+    //     "</html>");
+    // printf("html_size = %d\n", html_size);
+    // http_size = sprintf(http_temp,
+    //     "HTTP/1.1 200 OK\x0d\x0a"
+    //     "Content-Type: text/html\x0d\x0a"
+    //     "Content-Length: 193\x0d\x0a\x0d\x0a");
+    // printf("http_size = %d\n", http_size);
+    // pay_size = http_size + html_size;
+    // printf("pay_size = %d\n", pay_size);
+
+    int post_payload_size = 257 + 65  ;   // Content-Length: header is changed so post_payload_size is increased.
+    //memcpy ( (char*)packet + 40, "HTTP/1.1 200 OK" + 0x0d0a + "Content-Length: 1" + 0x0d0a + "Content-Type: text/plain" + 0x0d0a0d0a + "a" , post_payload_size ) ;
+    memcpy ( (char*)packet_buffer + hdr_size_total, "HTTP/1.1 200 OK\x0d\x0a"
+            "Content-Length: 257\x0d\x0a"
+            "Content-Type: text/html"
+            "\x0d\x0a\x0d\x0a"
+            "<html>\r\n"
+            "<head>\r\n"
+            "<meta charset=\"UTF-8\">\r\n"
+            "<title>\r\n"
+            "CroCheck - WARNING - PAGE\r\n"
+                "SITE BLOCKED - WARNING - \r\n"
+            "</title>\r\n"
+            "</head>\r\n"
+            "<body>\r\n"
+            "<center>\r\n"
+                "<img   src=\"http://127.0.0.1:3000/warning.jpg\" alter=\"*WARNING*\">\r\n"
+                "<h1>SITE BLOCKED</h1>\r\n"
+            "</center>\r\n"
+            "</body>\r\n"
+            "</html>", post_payload_size ) ;
+
+    // printf("--http_payload--\n%s\n\n", (char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size));
 
     // Pseudo hedaer and buffer for checksum
     memset(checksum_buffer, 0x00, sizeof(checksum_buffer));
@@ -420,22 +488,84 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     psd_hdr->d_ip = iphdr->ip_dst.s_addr;   // operand is already Big-Endian
     psd_hdr->rsvd = 0x00;                   // this should always be 0
     psd_hdr->prtc = IPPROTO_TCP;    // IPPTORO_TCP(which is 6) is defined in in.h
-    psd_hdr->tcp_len = htons(tcphdr_size + block_site.data_size);   // host to network. lengh of header + data
+    psd_hdr->tcp_len = htons(tcphdr_size + post_payload_size);   // host to network. lengh of header + data
+    // psd_hdr->tcp_len = htons(tcphdr_size + pay_size);
     
-    memcpy((char *)checksum_buffer + sizeof(pseudo_header), tcphdr, tcphdr_size);
-    memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size, block_site.http, block_site.http_size);
-    memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size + block_site.http_size, block_site.html, block_site.html_size);
+    // TCP checksum
+    // memcpy((char *)checksum_buffer + sizeof(pseudo_header), tcphdr, tcphdr_size);
+    // memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size, block_site.http, block_site.http_size);
+    // memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size + block_site.http_size, block_site.html, block_site.html_size);
+
+    // memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size, http_temp, http_size);
+    // memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size + http_size, html_temp, html_size);
+
+    memcpy ( (char*)checksum_buffer + tcphdr_size + sizeof(pseudo_header), "HTTP/1.1 200 OK\x0d\x0a"
+            "Content-Length: 230\x0d\x0a"
+            "Content-Type: text/html"
+            "\x0d\x0a\x0d\x0a"
+            "<html>\r\n"
+            "<head>\r\n"
+            "<meta charset=\"UTF-8\">\r\n"
+            "<title>\r\n"
+            "CroCheck - WARNING - PAGE\r\n"
+                "SITE BLOCKED - WARNING - \r\n"
+            "</title>\r\n"
+            "</head>\r\n"
+            "<body>\r\n"
+            "<center>\r\n"
+                "<img   src=\"http://127.0.0.1:3000/warning.jpg\" alter=\"*WARNING*\">\r\n"
+                "<h1>SITE BLOCKED</h1>\r\n"
+            "</center>\r\n"
+            "</body>\r\n"
+            "</html>", post_payload_size ) ;
     
     // is checksum should be htons?
-    tcphdr->th_sum = get_checksum((unsigned short *)checksum_buffer, sizeof(pseudo_header) + tcphdr_size + block_site.data_size);
-    printf("psd = %x\n", psd_hdr->s_ip);
-    printf("short* = %02x:%p + %02x:%p = %02x\n", checksum_buffer[0], &checksum_buffer[0], (unsigned char)*(checksum_buffer+1), (unsigned char *)(checksum_buffer+1), (unsigned short)*(unsigned short *)checksum_buffer);
+    tcphdr->th_sum = get_checksum((unsigned short *)checksum_buffer, sizeof(pseudo_header) + tcphdr_size + post_payload_size);
 
-    // Socket creation
-    // socket();
-    // setsockopt();
+    // memcpy((char *)packet_buffer + sizeof(pseudo_header) + tcphdr_size, http_temp, http_size);
+    // memcpy((char *)packet_buffer + sizeof(pseudo_header) + tcphdr_size + http_size, html_temp, html_size);
     
-    return 0;
+    // tcphdr->th_sum = get_checksum((unsigned short *)checksum_buffer, sizeof(pseudo_header) + tcphdr_size + pay_size);
+    // printf("psd = %x\n", psd_hdr->s_ip);
+    // printf("short* = %02x:%p + %02x:%p = %02x\n", checksum_buffer[0], &checksum_buffer[0], (unsigned char)*(checksum_buffer+1), (unsigned char *)(checksum_buffer+1), (unsigned short)*(unsigned short *)checksum_buffer);
+    // iphdr->ip_len = htons(iphdr_size + vlan_size + tcphdr_size + block_site.data_size);
+
+    // iphdr->ip_len = htons(iphdr_size + vlan_size + tcphdr_size + pay_size);
+    
+    iphdr->ip_len = htons(iphdr_size + vlan_size + tcphdr_size + post_payload_size);
+    
+    printf("t_len = %d\n", ntohs(iphdr->ip_len));
+    // Socket creation
+    /*
+    1st parameter:
+    AF_INET is an Address Family for ipv4 protocol, PF_INET is a Protocol Family.
+    can also use PF_PACKET, then you have to create L2 header too.
+    2nd parameter:
+    SOCK_STREAM is a type for connection-based streams which is TCP.
+    SOCK_RAW designates the socket as a raw data socket,
+    which it makes the programmer can control the header datas.
+    when the type is SOCK_RAW, the socket regards all the header datas as user datas.
+    Only root account can create RAW socket because the TCP/IP stack provided from kernel,
+    which only root account can access to them.
+    3rd parameter:
+    IPPROTO_RAW : raw protocol, which is user have to customise ip header too.
+    */
+    target_addr.sin_family = AF_INET;
+    target_addr.sin_port = tcphdr->th_dport;
+    target_addr.sin_addr = iphdr->ip_dst;
+    memset(target_addr.sin_zero, 0x00, sizeof(target_addr.sin_zero));
+    socket_raw = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    /* IP_HDRINCL's value is 1(TRUE(or enable), socket_opt_value) means user is going to create an ip header,
+    so notice to Ubuntu kernel to not modify ip header*/
+    setsockopt(socket_raw, IPPROTO_IP, IP_HDRINCL, (char *)&socket_opt_value, sizeof(socket_opt_value));
+    setsockopt(socket_raw, SOL_SOCKET, SO_BINDTODEVICE, global_dev, global_dev_len);
+    // sendto(); // 공부하기    // use iphdr->ip_len
+    sendto_result = sendto(socket_raw, packet_buffer, ntohs(iphdr->ip_len), 0x0, (struct sockaddr *)&target_addr, sizeof(target_addr));
+    if (sendto_result != ntohs(iphdr->ip_len)) {
+        printf("\nsendto() failed : %ld\n", sendto_result);
+    } else if (sendto_result == ntohs(iphdr->ip_len)) ret_value = 1;
+    
+    return ret_value;
 }
 
 void print_packet_hex(const unsigned char *packet, const struct pcap_pkthdr *header) {
@@ -581,20 +711,20 @@ the function creates a structure for the http packet payload.
 */
 void payloader(http_payload *payload_buffer) {
     payload_buffer->html_size = sprintf(payload_buffer->html,
-        "<!DOCTYPE html>"
-        "<html>"
-            "<head>"
-                "<title>UABS - Unauthorized Access Blocked</title>"
-            "</head>"
-            "<body>"
-                "<h1>ACCORDING TO THE COMPANY RULES, THE SITE JUST GOT BLOCKED.</h1>"
-            "</body>"
+        "<html>\r\n"
+            "<head>\r\n"
+                "<meta charset=\"UTF-8\">\r\n"
+                "<title>UABS - Unauthorized Access Blocked</title>\r\n"
+            "</head>\r\n"
+            "<body>\r\n"
+                "<h1>ACCORDING TO THE COMPANY RULES, THE SITE JUST GOT BLOCKED.</h1>\r\n"
+            "</body>\r\n"
         "</html>");
 
     payload_buffer->http_size = sprintf(payload_buffer->http,
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html\r\n"
-        "Content-Length: %d\r\n", payload_buffer->html_size);
+        "HTTP/1.1 200 OK\x0d\x0a"
+        "Content-Type: text/html\x0d\x0a"
+        "Content-Length: %d\x0d\x0a\x0d\x0a", payload_buffer->html_size);
     
     payload_buffer->data_size = payload_buffer->http_size + payload_buffer->html_size;
 }
