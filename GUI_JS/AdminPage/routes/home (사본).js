@@ -40,21 +40,23 @@ router.post('/setting', function(req, res){
     if (typeof(Ins_domain) == "undefined") {
     	domain = Del_domain;
     	sql = Del_sql;
-    	output = domain + " 삭제 성공";
-    } else if (typeof(Del_domain) == "undefined") {
+    	output = domain + " 삭제 성공"; 
+    }
+    else if (typeof(Del_domain) == "undefined") {
     	domain = Ins_domain;
     	sql = Ins_sql;
     	output = domain + " 추가 성공";
-    	}
+    }
     //VALUES의 물음표는 query함수의 두번째 인자.
 	maria.query(sql, domain, function(err, result, fields){
 	//인자로 sql문, Value, 함수 전달.
 		if(err) {
-			console.log(err+""); //에러가 있다면, 보안을 위해 콘솔에 err로그를 찍는다.
-			res.send("<script>alert('등록되어 있는 도메인입니다.'); history.back();</script>");
+			console.log(err+""); //에러가 있다면, 보안을 위해 콘솔에 err로그를 찍고,
+			res.send("<script>alert('도메인 추가에 실패했습니다.')</script>");
+			//res.status(500).send('Internal Server Error'); //사용자에게는 err로그를 보여주지 않는다.
 		}else{
 			console.log(output);//데이터가 db에 잘 저장 되었다면, 콘솔에 성공이라 찍는다.
-			res.send("<script>alert('" + output + "'); history.back();</script>");
+			res.redirect('/setting');
 			//setting 페이지 새로고침
 		}
 	});
