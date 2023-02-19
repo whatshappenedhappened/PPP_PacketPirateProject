@@ -2,16 +2,45 @@
 <html>
   <head>
     <%- include('../partials/head') %>
+	<script>
+		function ins_isEmpty(event) {
+			let domain =  document.querySelector("#ins_form");
+			if (!domain.value){
+				alert("등록할 도메인 입력해주세요.");
+				return false;
+			}
+			alert(domain.value);
+			return true;
+		}
+		
+		function del_isEmpty(event) {
+			let domain =  document.querySelector("#del_form");
+			if (!domain.value){
+				alert("삭제할 도메인 입력해주세요.");
+				return false
+			}
+			return true;
+		}
+		
+	</script>
+
   </head>
   <body>
     <%- include('../partials/nav') %>
 
     <div class="container mb-3">
-    	<h2>차단 도메인 추가</h2>
-            <form action = "/setting" method = "post">
+            <form action = "/setting" method = "post" onsubmit="return ins_isEmpty();">
 		    <ul>
-		        <p> 입력해주세요  
-		        <input type = "text" name = "domain" placeholder = "도메인">
+		        <p>
+		        <input id = "ins_form" type = "text" name = "Ins_domain" placeholder = "추가할 도메인" autocomplete = "off">
+		        <input type="submit" value = "입력">
+		        </p>
+		    </ul>
+            </form>
+            <form action = "/setting" method = "post" onsubmit="return del_isEmpty()">
+		    <ul>
+		        <p>
+		        <input id = "del_form" type = "text" name = "Del_domain" placeholder = "삭제할 도메인" autocomplete = "off">
 		        <input type="submit" value = "입력">
 		        </p>
 		    </ul>
