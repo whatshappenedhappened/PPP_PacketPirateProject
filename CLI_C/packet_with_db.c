@@ -268,7 +268,6 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     char *url_from_db = NULL;
     int sql_get_flag = 0;
     int sendraw_result = 0; // 1 on success, 0 on fail
-    printf("*th->tcp_off = %x\n", th->th_offx2);
 
     /* ip output variables */
     char srcip[16], dstip[16];
@@ -314,7 +313,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     /* ethernet output */
 
     output_flag = output_select;
-    
+    printf("-- THE END --\n");
 }
 /*
 plus all the cksum_packet data as 2bytes each.
@@ -346,7 +345,7 @@ unsigned int get_checksum(unsigned short *cksum_packet, unsigned int cksum_len) 
 
 int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
 
-    char packet_buffer[1600];
+    char packet_buffer[768];
     layer2 *ethdr = (layer2 *)packet_ref;
     unsigned int vlan_size = 0;
     layer3 *iphdr;
@@ -394,7 +393,7 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
 
     /* TAMPERED PACKET CREATION */
     // clean-up all the memory bytes of packet_buffer[] and bind the two header variables to it.
-    memset(packet_buffer, 0x00, 1600);
+    memset(packet_buffer, 0x00, 768);
     iphdr = (layer3 *)(packet_buffer + vlan_size);
     tcphdr = (layer4 *)(packet_buffer + vlan_size + iphdr_size);
     hdr_size_total = sizeof(layer3) + sizeof(layer4) + vlan_size;
@@ -555,15 +554,22 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     target_addr.sin_addr = iphdr->ip_dst;
     memset(target_addr.sin_zero, 0x00, sizeof(target_addr.sin_zero));
     socket_raw = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (socket_raw > 0) {
+        puts("socket() OK.");
+    }
     /* IP_HDRINCL's value is 1(TRUE(or enable), socket_opt_value) means user is going to create an ip header,
     so notice to Ubuntu kernel to not modify ip header*/
-    setsockopt(socket_raw, IPPROTO_IP, IP_HDRINCL, (char *)&socket_opt_value, sizeof(socket_opt_value));
-    setsockopt(socket_raw, SOL_SOCKET, SO_BINDTODEVICE, global_dev, global_dev_len);
+    if (setsockopt(socket_raw, IPPROTO_IP, IP_HDRINCL, (char *)&socket_opt_value, sizeof(socket_opt_value)) != -1) {
+        puts("setsockopt() OK.");
+    }
+    // setsockopt(socket_raw, SOL_SOCKET, SO_BINDTODEVICE, global_dev, global_dev_len);
     // sendto(); // 공부하기    // use iphdr->ip_len
-    sendto_result = sendto(socket_raw, packet_buffer, ntohs(iphdr->ip_len), 0x0, (struct sockaddr *)&target_addr, sizeof(target_addr));
+    sendto_result = sendto(socket_raw, &packet_buffer, ntohs(iphdr->ip_len), 0x0, (struct sockaddr *)&target_addr, sizeof(target_addr));
     if (sendto_result != ntohs(iphdr->ip_len)) {
         printf("\nsendto() failed : %ld\n", sendto_result);
     } else if (sendto_result == ntohs(iphdr->ip_len)) ret_value = 1;
+
+    close(socket_raw);
     
     return ret_value;
 }
