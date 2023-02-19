@@ -271,7 +271,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     char *dstbf = inet_ntoa(ip->ip_dst);
     strcpy(dstip, dstbf);
 
-                                        // 23-02-16 Appended //
+    // 23-02-16 Appended //
     print_packet_hex(packet, header);
 
     // MYSQL
@@ -439,19 +439,16 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
 }
 
 void print_packet_hex(const u_char* packet, const struct pcap_pkthdr* header) {	
-	
-	//packet > 패킷 데이터
+    //packet > 패킷 데이터
 	//byte_len > 패킷 전체의 길이
 	int i;
-    int cnt = 0;
+    int byte_zero = 0;
+    int byte_offset = 16;
     //u_char* pk = packet;
     int byte_len = header->len;
 
     //1460byte 선언
 	u_char buff[1460] = {0,};
-    char arr[16] = {0,};
-    int len = sizeof(arr) / sizeof(char);
-
 
 	// 데이터의 길이를 보여준다.
 	for (i = 0; i < byte_len; i++)
@@ -465,13 +462,12 @@ void print_packet_hex(const u_char* packet, const struct pcap_pkthdr* header) {
 			}
 			// 입출력 바이트.
             // i = 10
-			printf("  \t\t\t\t%04x ", cnt * 2);
-            cnt++;
+			printf("  \t\t\t\t%04d ", byte_offset * byte_zero++);
 		}
 
-		// AB CD D2 A3 5B B3 A4 C2  > 아스키 코드를 16진수(정수)로 나열.
-		printf(" %02x", packet[i]);
-
+		// AB CD D2 A3 5B B3 A4 C2  > 아스키 코드를 16진수(정수)로 나열
+        printf(" %02x", packet[i]);
+        
         // 아스키코드 32 ~ 126 (10진수로)
             //32                //126, 127은 DEL문자 제외.
 		if ((packet[i] < 0x20) || (packet[i] > 0x7e)) {
@@ -491,6 +487,7 @@ void print_packet_hex(const u_char* packet, const struct pcap_pkthdr* header) {
 	printf("  %s\n", buff);
     //printf("[byte : %d]",byte_len);
 }
+
 
 int sql_get_domain(char * url_name) {
     char query_string[768];      // must be freed before the function closed
