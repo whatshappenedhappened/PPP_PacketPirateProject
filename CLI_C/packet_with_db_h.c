@@ -20,17 +20,33 @@ static MYSQL_ROW sql_row;       // must be freed before the program closed
 
 
 /* Ethernet addresses are 6 bytes */
-#define ETHER_ADDR_LEN	6
-#define SIZE_ETHERNET   14
+#define ETHER_ADDR_LEN	6       // ethernet address will always be 6B (0x00:0x00:0x00:0x00:0x00:0x00)
+#define SIZE_ETHERNET   14      // ethernet header size, 6B of dst_MAC / 6B of src_MAC / 2B of Ether_type
 
 /* STRUCTURE DEFINITION PART */
 // Going to add got_packet and structures to use
-typedef struct dev_ip{
+typedef struct __dev_ip {
     unsigned char oct_first;
     unsigned char oct_second;
     unsigned char oct_third;
     unsigned char oct_fourth;
 } DEV_IP;
+
+typedef struct __http_payload {
+    char http[120];             // http string
+    char html[280];             // html string
+    unsigned int http_size;     // byte size of http string
+    unsigned int html_size;     // byte size of html string
+    unsigned int data_size;     // http_size + html size
+} http_payload;
+
+typedef struct __pseudo_header {
+    u_int32_t s_ip;     // source ip address
+    u_int32_t d_ip;     // destination ip address
+    u_int8_t rsvd;      // 8 bits reserved, always 0
+    u_int8_t prtc;      // protocol from ip header, tcp checksum will be 6
+    u_int16_t tcp_len;  // length of tcp header + data
+} pseudo_header;
 
 /* Ethernet header */
 typedef struct sniff_ethernet {
@@ -83,19 +99,16 @@ typedef struct sniff_tcp {
 	u_short th_urp;		/* urgent pointer */
 }layer4;
 
-typedef struct pseudo_header {
-    unsigned int src_ip;
-    unsigned int dst_ip;
-    unsigned char rsvd;
-    unsigned char protocol;
-    unsigned short tcp_len;
-}pseudo_header;
 ///////////////////////////////
 
 /* FUNCTION DECLARATION PART */
 DEV_IP devnet(unsigned char *);
-
 int devmask(bpf_u_int32);
+void payloader(http_payload *);
+
+unsigned int get_checksum(unsigned short *cksum_packet, unsigned int cksum_len);
+
+int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
 
 int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
 
@@ -104,7 +117,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
 
 // Print function
-void print_packet_hex(const u_char* packet, const struct pcap_pkthdr* header);
+void print_packet_hex(const unsigned char *packet, const struct pcap_pkthdr *header);
 ///////////////////
 
 // void init_pcap();
@@ -274,7 +287,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         memcpy(url_name, find_host, url_size);
         printf("URL : %s\n", url_name);
         sql_get_flag = sql_get_domain(url_name);
-        printf("sql_get_flag = %d\n", sql_get_flag);
+        printf("sql_get_flag = %d\n\n\n", sql_get_flag);
     }
 
     if (sql_get_flag == 1) {
@@ -294,6 +307,33 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     output_flag = output_select;
     
 }
+/*
+plus all the cksum_packet data as 2bytes each.
+if there is carry nibble(over 2bytes), cut the carry nibble and plus it to rest of 2bytes.
+get the 1's complement of sum.
+*/
+unsigned int get_checksum(unsigned short *cksum_packet, unsigned int cksum_len) {
+    unsigned int sum = 0;
+    unsigned int carry_nibble = 0;
+    printf("cksize = %d\n", cksum_len);
+    while (cksum_len > 1) {
+        // printf("sum = %d\tpacket = %d\t len = %d\n", sum, *cksum_packet, cksum_len);
+        sum += *cksum_packet++;
+        cksum_len -= 2;
+    }
+
+    if (cksum_len) {
+        // printf("additional\nsum = %d\tpacket = %d\t len = %d\n", sum, *(unsigned char *)cksum_packet, cksum_len);
+        sum += *cksum_packet++;
+        cksum_len--;
+    }
+
+    carry_nibble = sum >> 16;
+    sum += carry_nibble;
+    carry_nibble = sum + ~sum;
+    printf("sum = %x\nchecksum = %x\n", ~sum, carry_nibble);
+    return ~sum;
+}
 
 int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
 
@@ -311,13 +351,19 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     layer3 *ip_ref; // ip_ref
     layer4 *tcp_ref; // tcp_ref
 
+    // for payload
+    http_payload block_site;
+
+    // for checksum
+    pseudo_header *psd_hdr;
+    char checksum_buffer[1024];
+
     /* ETHERNET TYPE EXAMINATION */
     // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
     if (ethdr->ether_type == 0x81) {
-        printf("vlan\n");
         vlan_size = 4;
     } else if (ethdr->ether_type == 0x08) {
-        puts("normal ipv4\n");
+        vlan_size = 0;
     }
 
     ip_ref = (layer3 *)(packet_ref + vlan_size + SIZE_ETHERNET); // ip_ref
@@ -338,15 +384,16 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     // IP header
     // htonc, htons, htonl isn't necessary because the packet_ref is already loaded as Big-Endian.
     // and the headers we're creating here will be sent to the target network which is also Big-Endian.
-    iphdr->ip_vhl = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_vhl;
-    iphdr->ip_tos = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_tos;
-    // iphdr->ip_len = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_len;
-    iphdr->ip_id = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_id + htons(1); // should research about identification
-    // iphdr->ip_off = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_off; // 0 default
+    iphdr->ip_vhl = ip_ref->ip_vhl;
+    iphdr->ip_tos = ip_ref->ip_tos;
+    // iphdr->ip_len = ip_ref->ip_len;
+    iphdr->ip_id = ip_ref->ip_id + htons(1); // should research about identification
+    // iphdr->ip_off = ip_ref->ip_off; // 0 default
     iphdr->ip_ttl = 64;     // I just set this as 64, don't ask me why, anyway. :(
     iphdr->ip_p = 0x06;     // TCP == 0x06;
-    iphdr->ip_src = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_dst; // twist src ip and dst ip
-    iphdr->ip_dst = ((layer3 *)(packet_ref + SIZE_ETHERNET))->ip_src; // because this will be sent to src ip from packet_ref
+    iphdr->ip_src = ip_ref->ip_dst; // twist src ip and dst ip
+    iphdr->ip_dst = ip_ref->ip_src; // because this will be sent to src ip from packet_ref
+    iphdr->ip_sum = get_checksum((unsigned short *)iphdr, sizeof(layer3));
     
     // TCP header
     tcphdr->th_sport = tcp_ref->th_dport; // twist src port and dst port
@@ -358,18 +405,50 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     tcphdr->th_flags = tcp_ref->th_flags;
     tcphdr->th_win = tcp_ref->th_win;
 
+    // HTTP payload bind
+    payloader(&block_site);
+    memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size), block_site.http, block_site.http_size);
+    memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size + block_site.http_size), block_site.html, block_site.html_size);
+
+    printf("http_payload\n%s\n\n", (char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size));
+
+    // Pseudo hedaer and buffer for checksum
+    memset(checksum_buffer, 0x00, sizeof(checksum_buffer));
+
+    psd_hdr = (pseudo_header *)checksum_buffer;
+    psd_hdr->s_ip = iphdr->ip_src.s_addr;   // operand is already Big-Endian
+    psd_hdr->d_ip = iphdr->ip_dst.s_addr;   // operand is already Big-Endian
+    psd_hdr->rsvd = 0x00;                   // this should always be 0
+    psd_hdr->prtc = IPPROTO_TCP;    // IPPTORO_TCP(which is 6) is defined in in.h
+    psd_hdr->tcp_len = htons(tcphdr_size + block_site.data_size);   // host to network. lengh of header + data
+    
+    memcpy((char *)checksum_buffer + sizeof(pseudo_header), tcphdr, tcphdr_size);
+    memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size, block_site.http, block_site.http_size);
+    memcpy((char *)checksum_buffer + sizeof(pseudo_header) + tcphdr_size + block_site.http_size, block_site.html, block_site.html_size);
+    
+    // is checksum should be htons?
+    tcphdr->th_sum = get_checksum((unsigned short *)checksum_buffer, sizeof(pseudo_header) + tcphdr_size + block_site.data_size);
+    printf("psd = %x\n", psd_hdr->s_ip);
+    printf("short* = %02x:%p + %02x:%p = %02x\n", checksum_buffer[0], &checksum_buffer[0], (unsigned char)*(checksum_buffer+1), (unsigned char *)(checksum_buffer+1), (unsigned short)*(unsigned short *)checksum_buffer);
+
+    // Socket creation
+    // socket();
+    // setsockopt();
+    
     return 0;
 }
 
 void print_packet_hex(const u_char* packet, const struct pcap_pkthdr* header) {	
-	
-	//packet > 패킷 데이터
+    //packet > 패킷 데이터
 	//byte_len > 패킷 전체의 길이
 	int i;
+    int byte_zero = 0;
+    int byte_offset = 16;
+    //u_char* pk = packet;
     int byte_len = header->len;
 
     //1460byte 선언
-	u_char buff[1460];
+	u_char buff[1460] = {0,};
 
 	// 데이터의 길이를 보여준다.
 	for (i = 0; i < byte_len; i++)
@@ -382,20 +461,20 @@ void print_packet_hex(const u_char* packet, const struct pcap_pkthdr* header) {
 				printf("  %s\n", buff);
 			}
 			// 입출력 바이트.
-			printf("  \t\t\t\t%04x ", i);
+            // i = 10
+			printf("  \t\t\t\t%04d ", byte_offset * byte_zero++);
 		}
 
-		// AB CD D2 A3 5B B3 A4 C2  > 아스키 코드를 16진수(정수)로 나열.
-		printf(" %02x", packet[i]);
-
+		// AB CD D2 A3 5B B3 A4 C2  > 아스키 코드를 16진수(정수)로 나열
+        printf(" %02x", packet[i]);
+        
         // 아스키코드 32 ~ 126 (10진수로)
-            //32                //126, 127은 DEL문자
+            //32                //126, 127은 DEL문자 제외.
 		if ((packet[i] < 0x20) || (packet[i] > 0x7e)) {
 			buff[i % 16] = '.';  
 		} else {
 			buff[i % 16] = packet[i];
 		}
-
 		buff[(i % 16) + 1] = '\0';
 	}
 
@@ -408,6 +487,7 @@ void print_packet_hex(const u_char* packet, const struct pcap_pkthdr* header) {
 	printf("  %s\n", buff);
     //printf("[byte : %d]",byte_len);
 }
+
 
 int sql_get_domain(char * url_name) {
     char query_string[768];      // must be freed before the function closed
@@ -426,7 +506,6 @@ int sql_get_domain(char * url_name) {
     if ((sql_result = mysql_store_result(connection)) != NULL) {
        puts("OK : SQL result stored.");
     } else {
-
         return 0;
     }
 
@@ -523,3 +602,28 @@ int devmask(bpf_u_int32 mask) {
     return cnt;
 }
 ////////////////////////////////////////////////////////////////////////
+
+/*
+payloader() take-up a pointer of http_payload type variable.
+the function creates a structure for the http packet payload.
+*/
+void payloader(http_payload *payload_buffer) {
+    payload_buffer->html_size = sprintf(payload_buffer->html,
+        "<!DOCTYPE html>"
+        "<html>"
+            "<head>"
+                "<title>UABS - Unauthorized Access Blocked</title>"
+            "</head>"
+            "<body>"
+                "<h1>ACCORDING TO THE COMPANY RULES, THE SITE JUST GOT BLOCKED.</h1>"
+            "</body>"
+        "</html>");
+
+    payload_buffer->http_size = sprintf(payload_buffer->http,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html\r\n"
+        "Content-Length: %d\r\n", payload_buffer->html_size);
+    
+    payload_buffer->data_size = payload_buffer->http_size + payload_buffer->html_size;
+}
+
