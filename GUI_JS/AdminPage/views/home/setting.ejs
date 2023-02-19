@@ -3,16 +3,17 @@
   <head>
     <%- include('../partials/head') %>
 	<script>
+	
+		//Insert 필터
 		function ins_isEmpty(event) {
 			let domain =  document.querySelector("#ins_form");
 			if (!domain.value){
 				alert("등록할 도메인 입력해주세요.");
 				return false;
 			}
-			alert(domain.value);
 			return true;
 		}
-		
+		//Delete 필터
 		function del_isEmpty(event) {
 			let domain =  document.querySelector("#del_form");
 			if (!domain.value){
