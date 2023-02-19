@@ -197,14 +197,6 @@ int main(int argc, char *argv[]) {
         printf("pcap_open_live() failed : %s", errbuf);
         return 3;
     } else { func_str_len += sprintf(func_str + func_str_len, "pcap_open_live() OK.\t\t\t[ Handler ]\t%p\n", handle);}
-    ///// t-
-    if (pcap_datalink(handle) != DLT_EN10MB) {
-                fprintf(stderr, "Device %s doesn't provide Ethernet headers - not supported\n", dev);
-                return(2);
-        } else {
-                printf("INFO: pcap_datalink OK\n");
-        }
-    /////
 
     if (pcap_compile(handle, &fp, filter, 0, net) == PCAP_ERROR) {
         printf("pcap_compile() failed : %s2\n",pcap_geterr(handle));
