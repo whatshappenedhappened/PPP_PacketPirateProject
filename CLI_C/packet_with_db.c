@@ -662,7 +662,7 @@ void bongloader(http_payload *payload_buffer) {
                 "<center>\r\n"
                 "<img src=\"https://cdn.discordapp.com/attachments/1065602473248686233/1070207120600997908/image.png\" height=\"300px\">\r\n"
                 "<h1>\" HAHA! I GOT YOU! \"</h1>\r\n"
-                "<p>You were excited thinking of accessing some <b>Hyung-Ak page</b>, don't you?</p>\r\n"
+                "<p>You were excited thinking of accessing some <b>Hyung-Ak</b> page, don't you?</p>\r\n"
                 "<p>Well, fortunetely <b>The Mighty Bong</b> is always watching you!</p>\r\n"
                 "</center>\r\n"
             "</body>\r\n"
