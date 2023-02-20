@@ -118,13 +118,15 @@ int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 o
 
 int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
 
+int sql_logger(char *srcip, char *dstip, u_short srcport, u_short dstport, char *url_name, bpf_u_int32 packet_len);
+
 void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
 
 // Print function
 void print_packet_enum(const u_char *packet, const struct pcap_pkthdr *header, int is_sendraw);
-void print_packet_hex(const u_char *packet, const struct pcap_pkthdr *header);
+void print_packet_hex(const u_char *packet, bpf_u_int32 packet_len);
 ///////////////////
 
 // void init_pcap();
@@ -164,7 +166,7 @@ int main(int argc, char *argv[]) {
     /* OUTPUT MODE */
     if (argc > 1 && argv[1]) {      // 실행시 입력값에 따라 상수 매크로의 값을 조절, -a는 모두 출력, 기본은 1
         if(strstr(argv[1], "-a") != NULL) {
-            output_select = 1;
+            output_select = 2;
             output_flag = output_select;
             o_output = "A Friendly Neighbor";
         } else if (strstr(argv[1], "-h") != NULL) {
@@ -269,6 +271,8 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     char url_name[512];
     char *url_from_db = NULL;
     int sql_get_flag = 0;
+    u_short srcport;
+    u_short dstport;
 
     /* ip output variables */
     char srcip[16], dstip[16];
@@ -276,6 +280,9 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
     strcpy(srcip, srcbf);
     char *dstbf = inet_ntoa(ip->ip_dst);
     strcpy(dstip, dstbf);
+
+    srcport = ntohs(th->th_sport);
+    dstport = ntohs(th->th_dport);
 
     int sendraw_result = 0;     //
 
@@ -296,21 +303,26 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         sql_get_flag = sql_get_domain(url_name);
         // printf("sql_get_flag = %d\n\n\n", sql_get_flag);
     }
-    ///////////////////////////////////// - 23 02 19 -
+
     if (sql_get_flag == 1) {
-        printf("WTF");
         sendraw_result = sendraw(packet, header);
         printf("ALERT : \"%s\" to \"%s\" blocked.\n", srcip, url_name);
+        if (sendraw_result) {
+            if (sql_logger(srcip, dstip, srcport, dstport, url_name, header->len) == 0) {
+                fprintf(stderr, "ERROR : sql_logger() failed.\n");
+            }
+        }
     }
-
-    if (output_flag == 2) {
-        print_packet_enum(packet, header, 0);
-        // print_packet_hex(packet, header);
-        output_flag = 0;
-    } else if (output_flag == 1) {
-        print_packet_enum(packet, header, 0);
-        output_flag = 0;
-    }
+    //
+    // if (output_flag == 2) {
+    //     print_packet_enum(packet, header, 0);
+    //     // print_packet_hex(packet, header);
+    //     output_flag = 0;
+    // } else if (output_flag == 1) {
+    //     print_packet_enum(packet, header, 0);
+    //     output_flag = 0;
+    // }
+    //
     // Query
     // sprintf(query_string, "SELECT ipv4, domain_name FROM tb_domains WHERE ipv4 = '%s'", dstip);
     // mysql_query(connection, query_string);
@@ -348,9 +360,10 @@ unsigned int get_checksum(unsigned short *cksum_packet, unsigned int cksum_len) 
     
     if (output_flag > 1) {
         if (carry_nibble != (unsigned int)*(unsigned int *)&"\xff\xff\xff\xff") {
-            printf("WARNING : checksum value isn't correct : %d\n", ~sum);
-        } else { printf("ALERT : checksum value is identified : %d\n", ~sum); }
+            printf("WARNING : checksum value isn't correct : %u\n", ~sum);
+        } else { printf("ALERT : checksum value is identified : %u\n", ~sum); }
     }
+    printf("\n");
 
     return ~sum;
 }
@@ -387,6 +400,8 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     int socket_opt_value = 1;
     ssize_t sendto_result = 0;
     struct sockaddr_in target_addr;
+
+    bpf_u_int32 packet_buffer_size = sizeof(packet_buffer);
 
     /* ETHERNET TYPE EXAMINATION */
     // ether_type take-up 2bytes. 0x8100 and 0x0800 represent vlan and normal ipv4 each.
@@ -493,7 +508,7 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
         puts("sendto() failed.\n");
     } else if (sendto_result == ntohs(iphdr->ip_len)) {
         send_stat = 1;
-    };
+    }
 
 
     // print_packet function preparing
@@ -504,86 +519,34 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     //     ethdr->ether_shost[i] = ether_ref->ether_dhost[i];
     // }
     // ethdr->ether_type = ether_ref->ether_type;
-
     if (send_stat == 1 && output_flag == 2) {
         print_packet_enum(packet_ref, header, 0);    // for referenced packet
-        // print_packet_hex();
+        print_packet_hex(packet_ref, header->len);
+        printf("\n\n---------------------------------\n\n");
         print_packet_enum(packet_buffer, header, 1);    // for blocking packet
-        // printf_packet_hex();
+        print_packet_hex(packet_buffer, ntohs(iphdr->ip_len));
+        printf("\n\n---------------------------------\n\n");
         output_flag == 0;
     } else if (send_stat == 1 && output_flag == 1) {
         print_packet_enum(packet_ref, header, 0);
+        printf("\n\n---------------------------------\n\n");
         print_packet_enum(packet_buffer, header, 1);
+        printf("\n\n---------------------------------\n\n");
         output_flag == 0;
     } else if (send_stat == 0 && output_flag == 2) {
         print_packet_enum(packet_ref, header, 0);
-        // print_packet_hex();
+        print_packet_hex(packet_ref, header->len);
+        printf("\n\n---------------------------------\n\n");
         output_flag == 0;
     } else if (send_stat == 0 && output_flag == 1) {
         print_packet_enum(packet_ref, header, 0);
+        printf("\n\n---------------------------------\n\n");
         output_flag == 0;
     }
 
 
     close(socket_raw);
     return send_stat;
-}
-
-void print_packet_hex(const unsigned char *packet, const struct pcap_pkthdr *header) {
-
-    //length > 패킷 길이 전체.
-    int length = header->len;
-    //cnt > 갯수 세주는 변수.
-    int cnt = 0;
-    int i;
-    int tab_cnt = 5;
-    int space_cnt = 16;
-
-    for (i = 0; i < tab_cnt; i ++) printf("\t");
-
-    for (i = 0; i < length; length--) {
-
-        printf("%02x ", *packet++);
-
-        if ((++cnt % space_cnt) == 0) {  
-            printf("\n");
-            if (*(packet + space_cnt)) printf("\t\t\t\t\t");
-        }
-    }
-}
-
-int sql_get_domain(char * url_name) {
-    char query_string[768];      // must be freed before the function closed
-    memset(query_string, 0x00, 768);
-
-    sprintf(query_string, "SELECT domain_name FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
-
-    sql_row = NULL;
-
-    if (mysql_query(connection, query_string) == 0) {
-        // puts("OK : SQL sent to DB server.");
-    } else {
-        return 0;
-    }
-
-    if ((sql_result = mysql_store_result(connection)) != NULL) {
-    //    puts("OK : SQL result stored.");
-    } else {
-        return 0;
-    }
-
-    if ((sql_row = mysql_fetch_row(sql_result)) != NULL) {      // 기존 함수와 달리 결과가 없으면 NULL을 반환하는 mysql_fetch_row()의 성질을 이용하여 url이 db에 있는지 없는지를 비교
-        
-        // puts("\n[Found a matched url from DB server]");
-        
-        return 1;
-    } else {
-        
-        // puts("[No matched url from DB server]");
-        
-        return 0;
-    }
-    return 0;
 }
 
 //////////////////// PACKET OUTPUT /////////////////////
@@ -604,7 +567,7 @@ void print_packet_enum(const u_char *packet, const struct pcap_pkthdr *header, i
     unsigned char pay_line_buffer[512];
     unsigned char pay_temp[65536];
     int i = 1;
-    size_t pay_line_size = 0;
+    unsigned int pay_line_size = 0;
     u_int pay_size = 0;
 
     if (!is_sendraw) {      // when the packet to print is not sendraw() packet type
@@ -699,19 +662,29 @@ void print_packet_enum(const u_char *packet, const struct pcap_pkthdr *header, i
         puts("   ▼ Hypertext Transfer Protocol");
         puts("     ▶ Contents: ");
         while(1) {
-            printf("cnt = %d\n", pay_spoint - payload);
+            // printf("cnt = %d\n", pay_spoint - payload);
             if (pay_spoint - payload > pay_size - 1) {
                 break;
             }
             memset(pay_line_buffer, 0x00, sizeof(pay_line_buffer));
             pay_epoint = strstr(pay_spoint, "\r\n");
+            if (pay_epoint == NULL) {
+                pay_epoint = strstr(pay_spoint, "\n");
+                if (pay_epoint == NULL) {
+                    pay_epoint = pay_spoint + 100;
+                }
+            }
+            if (pay_epoint - payload > pay_size - 1) {
+                pay_epoint = payload + pay_size;
+            }
+            // printf("spoint = %p\nepoint = %p\n", pay_spoint, pay_epoint);
             pay_line_size = pay_epoint - pay_spoint;
-            printf("pay_line_size = %ld\n", pay_line_size);             ///////////// 음수문제 해결할 것
+            // printf("pay_line_size = %u\n", pay_line_size);             ///////////// 음수문제 해결할 것
             memcpy(pay_line_buffer, pay_spoint, pay_line_size);
             printf("         %s\n", pay_line_buffer);
             pay_spoint = pay_epoint + 2;
         }
-        puts("---------------------------------\n");
+        // puts("---------------------------------\n");
     }
     
 
@@ -725,6 +698,149 @@ void print_packet_enum(const u_char *packet, const struct pcap_pkthdr *header, i
     //     printf("Found IP : %s\t%s\n\n", sql_row[0], sql_row[1]);
     // } else printf("-- No IP Found --\n\n");
     // printf("==================================\n\n");
+}
+
+void print_packet_hex(const u_char* packet, bpf_u_int32 packet_len) {
+    puts("\n   ▼ Hex Code");	
+    puts("     ▶ Contents: ");
+    //packet > 패킷 데이터
+	//packet_len > 패킷 전체의 길이
+	int i;
+    int j = 0;
+    int byte_zero = 0;
+    int byte_offset = 16;
+    //u_char* pk = packet;
+    // int packet_len = header->len;
+
+    // 1460byte 선언 -> 필요 x
+	// u_char buff[1460] = {0,};
+    
+	// 데이터의 길이를 보여준다.
+	for (i = 0; i < packet_len; i++)
+	{   
+        if (i % 8 == 0 && i != 0) printf(" ");
+		// 16의 배수는 새 줄(줄 오프셋 있음)을 의미
+		if ((i % 16) == 0)
+		{
+			//0번째 줄에 ASCII를 인쇄를 안함.
+			if (i != 0) {
+				printf(" \n");
+			}
+			// 입출력 바이트.
+            // i = 10
+			printf("\t %05d  ", byte_offset * byte_zero++);
+		}
+
+		// AB CD D2 A3 5B B3 A4 C2  > 아스키 코드를 16진수(정수)로 나열 X -> 16진수를 아스키 코드로 나열
+        printf(" %02x", packet[i]);
+
+        if ((i + 1) % 16 == 0 && i != 0) {
+            printf("    ");
+            while(j < i + 1) {
+                if (j % 8 == 0 && j % 16 != 0 && j != 0) {
+                    printf(" ");
+                }
+                if ((packet[j] < 0x20) || (packet[j] > 0x7e)) {
+                    printf(".");
+                } else if ((packet[j] == 0x0d) || (packet[j] == 0x0a)) {
+                    printf(".");
+                } else if (packet[j] == 0x20) { 
+                    printf(".");
+                } else {
+                    printf("%c", packet[j]);
+                }
+                j++;
+            }
+            // printf("\n");
+        }
+        // 아스키코드 32 ~ 126 (10진수로)
+            //32                //126, 127은 DEL문자 제외.
+		// if ((packet[i] < 0x20) || (packet[i] > 0x7e)) {
+		// 	buff[i % 16] = '.';
+		// } else {
+		// 	buff[i % 16] = packet[i];
+		// }
+		// buff[(i % 16) + 1] = '\0';
+	}
+
+	// 16진수가 아니면 마지막 줄을 펼침.
+	while (i % 16 != 0) {
+        if(i % 8 == 0) {
+            printf(" ");
+        }
+		printf("   ");
+		i++;
+	}
+    printf("    ");
+    while(j < i) {
+        if (j % 8 == 0 && j % 16 != 0 && j != 0) {
+            printf(" ");
+        }
+        if ((packet[j] < 0x20) || (packet[j] > 0x7e)) {
+            printf(".");
+        } else if ((packet[j] == 0x0d) || (packet[j] == 0x0a)) {
+            printf(".");
+        } else if (packet[j] == 0x20) { 
+            printf(".");
+        } else {
+            printf("%c", packet[j]);
+        }
+        j++;
+    }
+	// printf("  %s\n", buff);
+    // printf("[byte : %d]",packet_len);
+}
+
+int sql_get_domain(char * url_name) {
+    char query_string[768];      // must be freed before the function closed
+    memset(query_string, 0x00, 768);
+
+    sprintf(query_string, "SELECT domain_name FROM tb_domains WHERE domain_name = '%s' LIMIT 1;", url_name);
+
+    sql_row = NULL;
+
+    if (mysql_query(connection, query_string) == 0) {
+        // puts("OK : SQL sent to DB server.");
+    } else {
+        return 0;
+    }
+
+    if ((sql_result = mysql_store_result(connection)) != NULL) {
+    //    puts("OK : SQL result stored.");
+    } else {
+        return 0;
+    }
+
+    if ((sql_row = mysql_fetch_row(sql_result)) != NULL) {      // 기존 함수와 달리 결과가 없으면 NULL을 반환하는 mysql_fetch_row()의 성질을 이용하여 url이 db에 있는지 없는지를 비교
+        
+        // puts("\n[Found a matched url from DB server]");
+        
+        return 1;
+    } else {
+        
+        // puts("[No matched url from DB server]");
+        
+        return 0;
+    }
+    return 0;
+}
+
+int sql_logger(char *srcip, char *dstip, u_short srcport, u_short dstport, char *url_name, bpf_u_int32 packet_len) {
+    char query_string[768];      // must be freed before the function closed
+    memset(query_string, 0x00, 768);
+
+    sprintf(query_string, "INSERT INTO tb_packet_log VALUES( NULL, '%s', '%s', '%d', '%d', '%s', 0, '%d', now(), NULL )",
+                                            srcip, dstip, srcport, dstport, url_name, packet_len);
+    
+    // printf("%s\n", query_string);
+
+    if (mysql_query(connection, query_string) == 0) {
+        // puts("OK : SQL sent to DB server.");
+        return 1;
+    } else {
+        return 0;
+    }
+    return 0;
 }
 
 // void print_packet_sendraw(const u_char *packet, const struct pcap_pkthdr *header) {}
