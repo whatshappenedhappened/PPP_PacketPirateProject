@@ -306,7 +306,8 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 
     if (sql_get_flag == 1) {
         sendraw_result = sendraw(packet, header);
-        printf("ALERT : \"%s\" to \"%s\" blocked.\n", srcip, url_name);
+        printf("\tALERT : \"%s\" to \"%s\" blocked.\n", srcip, url_name);
+        printf("\n\t---------------------------------------------------------\n\n");
         if (sendraw_result) {
             if (sql_logger(srcip, dstip, srcport, dstport, url_name, header->len) == 0) {
                 fprintf(stderr, "ERROR : sql_logger() failed.\n");
@@ -522,16 +523,16 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     if (send_stat == 1 && output_flag == 2) {
         print_packet_enum(packet_ref, header, 0);    // for referenced packet
         print_packet_hex(packet_ref, header->len);
-        printf("\n\n---------------------------------\n\n");
+        printf("\n\t---------------------------------------------------------\n\n");
         print_packet_enum(packet_buffer, header, 1);    // for blocking packet
         print_packet_hex(packet_buffer, ntohs(iphdr->ip_len));
-        printf("\n\n---------------------------------\n\n");
+        printf("\n\t---------------------------------------------------------\n\n");
         output_flag == 0;
     } else if (send_stat == 1 && output_flag == 1) {
         print_packet_enum(packet_ref, header, 0);
-        printf("\n\n---------------------------------\n\n");
+        printf("\n\t---------------------------------------------------------\n\n");
         print_packet_enum(packet_buffer, header, 1);
-        printf("\n\n---------------------------------\n\n");
+        printf("\n\t---------------------------------------------------------\n\n");
         output_flag == 0;
     } else if (send_stat == 0 && output_flag == 2) {
         print_packet_enum(packet_ref, header, 0);
