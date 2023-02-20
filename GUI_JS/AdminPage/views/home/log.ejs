@@ -2,6 +2,8 @@
 <html>
   <head>
     <%- include('../partials/head') %>
+    <style>
+    </style>
   </head>
   <body>
     <%- include('../partials/nav') %>
@@ -9,18 +11,20 @@
     <div class="container mb-3">
 
       <div class="jumbotron">         
-            <table>
+            <table class="table">
+            	<thead>
 		  <tr>
-		    <th>ID</th>
-		    <th>출발지 IP</th>
+			<th>ID</th>
+			<th>출발지 IP</th>
 			<th>도착지 IP</th>
 			<th>출발지 Port</th>
 			<th>도착지 Port</th>
 			<th>도메인</th>
-			<th>결과값</th>
 			<th>패킷크기</th>
 			<th>발생시간</th>
 		  </tr>
+		</thead>
+		<tbody>
 		  <% log_data.forEach(item => {%>
 		  <tr>
 		  	
@@ -30,12 +34,12 @@
 			<td><%=item.src_port%></td>
 			<td><%=item.dst_port%></td>
 			<td><%=item.domain%></td>
-			<td><%=item.result%></td>
 			<td><%=item.pkt_size%></td>
 			<td><%=item.created_at%></td>
-                  </tr>
+              </tr>
                   <% }); %>
-  		 </table>
+		</tbody>
+		</table>
       </div>
 
     </div>

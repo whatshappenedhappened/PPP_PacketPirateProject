@@ -3,26 +3,19 @@
   <head>
     <%- include('../partials/head') %>
 	<script>
-	
-		//Insert 필터
-		function ins_formFilter(event) {
+		function ins_isEmpty(event) {
 			let domain =  document.querySelector("#ins_form");
-			
 			if (!domain.value){
 				alert("등록할 도메인 입력해주세요.");
 				return false;
 			}
 			return true;
 		}
-		//Delete 필터
-		function del_formFilter(event) {
+		
+		function del_isEmpty(event) {
 			let domain =  document.querySelector("#del_form");
 			if (!domain.value){
-				alert(item.domain_name);
 				alert("삭제할 도메인 입력해주세요.");
-				return false
-			}else if (!eq_cnt){
-				alert("등록되지 않은 도메인 입니다,");
 				return false
 			}
 			return true;
@@ -35,37 +28,39 @@
     <%- include('../partials/nav') %>
 
     <div class="container mb-3">
-            <form action = "/setting" method = "post" onsubmit="return ins_formFilter();">
+		<form class = "form" action = "/setting" method = "post" onsubmit="return ins_isEmpty();">
 		    <ul>
 		        <p>
-		        <input id = "ins_form" type = "text" name = "Ins_domain" placeholder = "추가할 도메인" autocomplete = "off">
-		        <input type="submit" value = "입력">
+		        <input class = "input" id = "ins_form" type = "text" name = "Ins_domain" placeholder = "추가할 도메인" autocomplete = "off">
+		        <input class = "submit" type="submit" value = "입력">
 		        </p>
 		    </ul>
             </form>
-            <form action = "/setting" method = "post" onsubmit="return del_formFilter()">
+            <form class = "form" action = "/setting" method = "post" onsubmit="return del_isEmpty()">
 		    <ul>
 		        <p>
-		        <input id = "del_form" type = "text" name = "Del_domain" placeholder = "삭제할 도메인" autocomplete = "off">
-		        <input type="submit" value = "입력">
+		        <input class = "input" id = "del_form" type = "text" name = "Del_domain" placeholder = "삭제할 도메인" autocomplete = "off">
+		        <input class = "submit" type="submit" value = "입력">
 		        </p>
 		    </ul>
             </form>
 	
       <div class="jumbotron">
             <table>
+            	<thead>
 		  <tr>
-		    <th>Block</th>
-		    <th>서버 IP</th>
 		    <th>차단할 도메인</th>
+		    <th>추가 일시</th>
 		  </tr>
+		</thead>
+		<tbody>
 		  <% log_data.forEach(item => {%>
 		  <tr>
-		  	<td><%=item.block_no%></td>
-		  	<td><%=item.ipv4%></td>
 			<td><%=item.domain_name%></td>
+			<td><%=item.created_at%></td>
                   </tr>
                   <% }); %>
+		</tbody>
   		 </table>
       </div>
 
