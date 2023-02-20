@@ -299,8 +299,8 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         find_host += 6;
         url_size = strstr(find_host, "\x0d\x0a") - find_host;
         memcpy(url_name, find_host, url_size);
-        // printf("URL : %s\n", url_name);
         sql_get_flag = sql_get_domain(url_name);
+        // printf("URL : %s\n", url_name);
         // printf("sql_get_flag = %d\n\n\n", sql_get_flag);
     }
 
@@ -450,8 +450,8 @@ int sendraw(const u_char *packet_ref, const struct pcap_pkthdr *header) {
     tcphdr->th_win = tcp_ref->th_win;
 
     // HTTP + HTML payload bind
-    // payloader(&block_site);
-    bongloader(&block_site);
+    payloader(&block_site);
+    // bongloader(&block_site);
     memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size), block_site.http, block_site.http_size);
     memcpy((char *)packet_buffer + (vlan_size + iphdr_size + tcphdr_size + block_site.http_size), block_site.html, block_site.html_size);
 
@@ -881,10 +881,18 @@ void payloader(http_payload *payload_buffer) {
         "<!DOCTYPE html>\r\n"
         "<html>\r\n"
             "<head>\r\n"
-                "<title>UABS - Unauthorized Access Blocked</title>\r\n"
+                "<title>PPP - Packet Pirate Project</title>\r\n"
+                "<style>\r\n"
+                    "body { background-color : #404040 }\r\n"
+                "</style>\r\n"
             "</head>\r\n"
             "<body>\r\n"
-                "<h1>ACCORDING TO THE COMPANY RULES, THE SITE JUST GOT BLOCKED.</h1>\r\n"
+                "<center>\r\n"
+                "<img src=\"https://cdn-icons-png.flaticon.com/512/179/179386.png\" width=\"300 px\">\r\n"
+                "<hr>\r\n"
+                "<h1 style=\"color:white; font-family:monospace; font-size:30px;\">UNAUTHORIZED ACCESS DENIED</h1>\r\n"
+                "<p style=\"color:white; font-family:monospace; font-size:15px;\">According to the company rules, cannot enter the page.</p>\r\n"
+                "</center>\r\n"
             "</body>\r\n"
         "</html>\r\n");
 
@@ -909,7 +917,7 @@ void bongloader(http_payload *payload_buffer) {
             "<body>\r\n"
                 "<center>\r\n"
                 "<img src=\"https://cdn.discordapp.com/attachments/1065602473248686233/1070207120600997908/image.png\" height=\"300px\">\r\n"
-                "<h1>\" AHA! I GOT YOU! \"</h1>\r\n"
+                "<h1 style=\"color: #FFFFFF;\">\" AHA! I GOT YOU! \"</h1>\r\n"
                 "<p>You were excited thinking of accessing some <b>Hyung-Ak</b> page, don't you?</p>\r\n"
                 "<p>Well, fortunetely <b>The Mighty Bong</b> is always watching you!</p>\r\n"
                 "</center>\r\n"
