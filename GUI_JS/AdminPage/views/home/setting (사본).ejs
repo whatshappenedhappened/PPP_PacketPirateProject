@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <%- include('../partials/head') %>
+	<head>
+		<%- include('../partials/head') %>
 	<script>
 		function ins_isEmpty(event) {
 			let domain =  document.querySelector("#ins_form");
@@ -11,7 +11,6 @@
 			}
 			return true;
 		}
-		
 		function del_isEmpty(event) {
 			let domain =  document.querySelector("#del_form");
 			if (!domain.value){
@@ -23,47 +22,49 @@
 		
 	</script>
 
-  </head>
-  <body>
-    <%- include('../partials/nav') %>
+	</head>
+	<body>
+		<%- include('../partials/nav') %>
 
-    <div class="container mb-3">
-		<form class = "form" action = "/setting" method = "post" onsubmit="return ins_isEmpty();">
-		    <ul>
-		        <p>
-		        <input class = "input" id = "ins_form" type = "text" name = "Ins_domain" placeholder = "추가할 도메인" autocomplete = "off">
-		        <input class = "submit" type="submit" value = "입력">
-		        </p>
-		    </ul>
-            </form>
-            <form class = "form" action = "/setting" method = "post" onsubmit="return del_isEmpty()">
-		    <ul>
-		        <p>
-		        <input class = "input" id = "del_form" type = "text" name = "Del_domain" placeholder = "삭제할 도메인" autocomplete = "off">
-		        <input class = "submit" type="submit" value = "입력">
-		        </p>
-		    </ul>
-            </form>
+		<div class="container mb-3">
+		<form class = "form" action = "/setting" method = "post" 						onsubmit="return ins_isEmpty();">
+			<ul>
+			<p>
+				<input class = "input" id = "ins_form" type = "text" name = "Ins_domain" 					placeholder = "추가할 도메인" autocomplete = "off">
+				<input class = "submit" type="submit" value = "입력">
+			</p>
+			</ul>
+		</form>
+		<form class = "form" action = "/setting" method = "post" 						   onsubmit="return del_isEmpty()">
+			<ul>
+			<p>
+				<input class = "input" id = "del_form" type = "text" name = "Del_domain" 					placeholder = "삭제할 도메인" autocomplete = "off">
+				<input class = "submit" type="submit" value = "입력">
+			</p>
+			</ul>
+		</form>
 	
-      <div class="jumbotron">
-            <table>
+		<div class="jumbotron">
+		<table>
+		
             	<thead>
-		  <tr>
-		    <th>차단할 도메인</th>
-		    <th>추가 일시</th>
-		  </tr>
+			<tr>
+				<th>차단할 도메인</th>
+				<th>추가 일시</th>
+			</tr>
 		</thead>
+		
 		<tbody>
-		  <% log_data.forEach(item => {%>
-		  <tr>
-			<td><%=item.domain_name%></td>
-			<td><%=item.created_at%></td>
-                  </tr>
-                  <% }); %>
+			<% log_data.forEach(item => {%>
+			<tr>
+				<td><%=item.domain_name%></td>
+				<td><%=item.created_at%></td>
+			</tr>
+			<% }); %>
 		</tbody>
-  		 </table>
-      </div>
-
-    </div>
-  </body>
+		
+		</table>
+		</div>
+		</div>
+	</body>
 </html>

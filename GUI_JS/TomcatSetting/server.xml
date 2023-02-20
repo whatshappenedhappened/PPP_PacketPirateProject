@@ -148,7 +148,10 @@
 
       </Host>
       <Host name="http.lineage.plaync.com"  appBase="/UABS/UABS/GUI_JS/TomcatHost/lineage/webapps" unpackWARs="true" autoDeploy="true">
-
+      </Host>
+      <Host name="http.maplestory.nexon.com"  appBase="/UABS/UABS/GUI_JS/TomcatHost/maplestory/webapps" unpackWARs="true" autoDeploy="true">
+      </Host>
+      <Host name="http.loblox.com"  appBase="/UABS/UABS/GUI_JS/TomcatHost/roblox/webapps" unpackWARs="true" autoDeploy="true">
       </Host>
     </Engine>
   </Service>

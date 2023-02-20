@@ -7,11 +7,8 @@ var util = require('./util');
 var app = express();
 
 // mariaDB connect
-//const maria_login = require('./database/connect/maria_login');
-//maria_login.connect();
 const maria = require('./database/connect/maria');
 maria.connect();
-
 
 // Other settings
 app.set('view engine', 'ejs');
