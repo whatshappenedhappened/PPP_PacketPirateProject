@@ -314,16 +314,18 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
             }
         }
     }
-    //
-    // if (output_flag == 2) {
-    //     print_packet_enum(packet, header, 0);
-    //     // print_packet_hex(packet, header);
-    //     output_flag = 0;
-    // } else if (output_flag == 1) {
-    //     print_packet_enum(packet, header, 0);
-    //     output_flag = 0;
-    // }
-    //
+    
+    if (output_flag == 2) {
+        print_packet_enum(packet, header, 0);
+        print_packet_hex(packet, header->len);
+        printf("\n\t---------------------------------------------------------\n\n");
+        output_flag = 0;
+    } else if (output_flag == 1) {
+        print_packet_enum(packet, header, 0);
+        printf("\n\t---------------------------------------------------------\n\n");
+        output_flag = 0;
+    }
+    
     // Query
     // sprintf(query_string, "SELECT ipv4, domain_name FROM tb_domains WHERE ipv4 = '%s'", dstip);
     // mysql_query(connection, query_string);
