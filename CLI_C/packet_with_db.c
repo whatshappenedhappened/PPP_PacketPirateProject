@@ -706,7 +706,7 @@ void print_packet_enum(const u_char *packet, const struct pcap_pkthdr *header, i
             memset(pay_line_buffer, 0x00, sizeof(pay_line_buffer));
             pay_epoint = strstr(pay_spoint, "\r\n");
             pay_line_size = pay_epoint - pay_spoint;
-            printf("pay_line_size = %ld\n", pay_line_size);
+            printf("pay_line_size = %ld\n", pay_line_size);             ///////////// 음수문제 해결할 것
             memcpy(pay_line_buffer, pay_spoint, pay_line_size);
             printf("         %s\n", pay_line_buffer);
             pay_spoint = pay_epoint + 2;
