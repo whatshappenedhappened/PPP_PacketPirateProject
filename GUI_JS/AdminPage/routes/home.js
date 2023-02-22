@@ -6,14 +6,14 @@ const maria = require('../database/connect/maria');
 
 // Home
 router.get('/', function(req, res){
-  res.render('home/welcome');
+	res.render('home/welcome');
 });
 router.get('/about', function(req, res){
-  res.render('home/about');
+	res.render('home/about');
 });
 
 router.get('/setting', function(req, res){
-	maria.query('SELECT * FROM tb_domains', function(err, rows, fields) {
+	maria.query('SELECT * FROM tb_domains ORDER BY created_at desc', function(err, rows, fields) {
 		if(!err) {
 			//res.send(rows); // responses send rows
 			res.render("home/setting", { log_data: rows });
@@ -27,24 +27,26 @@ router.get('/setting', function(req, res){
 // DB INSERT, DELETE
 router.post('/setting', function(req, res){
 //setting.ejs에서 form태그의 post방식으로 데이터를 받는다.
+	const Ins_domain = req.body.Ins_domain; //request 객체의 body객체의 title값.
+	const Ins_sql = 'INSERT INTO tb_domains (comment, domain_name) VALUES(?, ?)';
+	const Del_domain = req.body.Del_domain;
+	const Del_sql = 'DELETE FROM tb_domains WHERE domain_name = ?';
 	
-    const Ins_domain = req.body.Ins_domain;	//request 객체의 body객체의 title값.
-    const Ins_sql = 'INSERT INTO tb_domains (domain_name) VALUES(?)';
-    const Del_domain = req.body.Del_domain;	//request 객체의 body객체의 title값.
-    const Del_sql = 'DELETE FROM tb_domains WHERE domain_name = ?';
-    var domain = "";
-    var sql = "";
-    var output = "";
-    if (typeof(Ins_domain) == "undefined") {
-    	domain = Del_domain;
-    	sql = Del_sql;
-    	output = domain + " 삭제 성공";
-    } else if (typeof(Del_domain) == "undefined") {
-    	domain = Ins_domain;
-    	sql = Ins_sql;
-    	output = domain + " 추가 성공";
-    	}
-    //VALUES의 물음표는 query함수의 두번째 인자.
+	let domain = [];
+	let sql = "";
+	let output = "";
+	
+	if (typeof(Ins_domain) == "undefined") {
+		domain = Del_domain;
+		sql = Del_sql;
+		output = domain + " 삭제 성공";
+	}else if (typeof(Del_domain) == "undefined") {
+		domain = Ins_domain;
+		sql = Ins_sql;
+		output = domain[1] + " 추가 성공";
+	}
+	
+	//VALUES의 물음표는 query함수의 두번째 인자.
 	maria.query(sql, domain, function(err, result, fields){
 	//인자로 sql문, Value, 함수 전달.
 		if(err) {
@@ -59,7 +61,7 @@ router.post('/setting', function(req, res){
 });
 
 router.get('/log', function(req, res){
-	maria.query('SELECT * FROM tb_packet_log ORDER BY created_at DESC LIMIT 20', function(err, rows, fields) {
+	maria.query('SELECT * FROM tb_packet_log ORDER BY created_at DESC LIMIT 20', function(err, 			rows, fields) {
 		if(!err) {
 			//res.send(rows); // responses send rows
 			res.render("home/log", { log_data: rows });
