@@ -106,6 +106,10 @@ typedef struct sniff_tcp {
 
 ///////////////////////////////
 
+///// pcap_breakloop() test
+// pcap_t *handle;
+///
+
 /* FUNCTION DECLARATION PART */
 DEV_IP devnet(unsigned char *);
 int devmask(bpf_u_int32);
@@ -165,16 +169,28 @@ int main(int argc, char *argv[]) {
     printf("\n");
     /* OUTPUT MODE */
     if (argc > 1 && argv[1]) {      // 실행시 입력값에 따라 상수 매크로의 값을 조절, -a는 모두 출력, 기본은 1
-        if(strstr(argv[1], "-a") != NULL) {
-            output_select = 2;
-            output_flag = output_select;
-            o_output = "A Friendly Neighbor";
-        } else if (strstr(argv[1], "-h") != NULL) {
-            output_select = 0;
-            output_flag = output_select;
-            o_output = "Hitman";
+        if (argc < 3 && (strstr(argv[1], "--help") != NULL || strstr(argv[1], "-h") != NULL || strstr(argv[1], "-m") != NULL)) {
+                puts("--------------------------------------------------------------\n");
+                puts("[ Packet Pirate Project Helper ]\n");
+                puts("ppp -m h\t run PPP as hitman mode");
+                puts("ppp -m a\t run PPP as a friendly neighbor mode");
+                puts("\n--------------------------------------------------------------");
+                puts("");
+
+                exit(0);
+        } else if (argc < 4 && strstr(argv[1], "-m") != NULL) {
+            if(strstr(argv[2], "a") != NULL) {
+                output_select = 2;
+                output_flag = output_select;
+                o_output = "A Friendly Neighbor";
+            } else if (strstr(argv[2], "h") != NULL) {
+                output_select = 0;
+                output_flag = output_select;
+                o_output = "Hitman";
+            }
         }
     }
+    printf("argc = %d\n", argc);
     printf("Callsign = \" %s \"\n", o_output);
 
 
@@ -237,7 +253,7 @@ int main(int argc, char *argv[]) {
     // packet = pcap_next(handle, &header);
     // printf("Packet just got jacked : [%d]bytes\n", header.len);
     // PCAP LOOP //
-    pcap_loop(handle, 0, got_packet, NULL);
+    pcap_loop(handle, 0, got_packet, (u_char *)handle);
     // --------- //
 
 
@@ -255,7 +271,7 @@ int main(int argc, char *argv[]) {
         mysql_free_result(sql_result);
         sql_result = NULL;
     } else { puts("\nsql_result is already closed\n"); }
-
+    puts("\n\n\n END OF THE PROGRAM \n\n\n");
     return 0;
 }
 
@@ -299,6 +315,11 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         find_host += 6;
         url_size = strstr(find_host, "\x0d\x0a") - find_host;
         memcpy(url_name, find_host, url_size);
+        printf("URL : %s\n", url_name);
+        if (strcmp(url_name, "ppp.exit.com") == 0) {
+            puts("\n\nALERT : pcap_loop() closed\n\n");
+            pcap_breakloop((pcap_t *)args);
+        }
         sql_get_flag = sql_get_domain(url_name);
         // printf("URL : %s\n", url_name);
         // printf("sql_get_flag = %d\n\n\n", sql_get_flag);
