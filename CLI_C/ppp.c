@@ -124,7 +124,7 @@ int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 o
 
 int sql_logger(char *srcip, char *dstip, u_short srcport, u_short dstport, char *url_name, bpf_u_int32 packet_len);
 
-void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet);
+void got_packet(u_char *handle_addr, const struct pcap_pkthdr *header, const u_char *packet);
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
 
@@ -275,7 +275,7 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
+void got_packet(u_char *handle_addr, const struct pcap_pkthdr *header, const u_char *packet) {
     layer2 *ethernet = (layer2 *)(packet);
     layer3 *ip = (layer3 *)(packet + SIZE_ETHERNET);
     u_int ip_size = 4 * IP_HL(ip);
@@ -318,7 +318,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
         printf("URL : %s\n", url_name);
         if (strcmp(url_name, "ppp.exit.com") == 0) {
             puts("\n\nALERT : pcap_loop() closed\n\n");
-            pcap_breakloop((pcap_t *)args);
+            pcap_breakloop((pcap_t *)handle_addr);
         }
         sql_get_flag = sql_get_domain(url_name);
         // printf("URL : %s\n", url_name);

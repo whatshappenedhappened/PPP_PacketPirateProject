@@ -29,10 +29,20 @@ request.setAttribute("tomcatExamplesUrl", "/examples/");
 
 <!DOCTYPE html>
 <html>
-	<head>
-	</head>
-	<body>
-		<h1>종료 페이지 입니다.</h1>
-	</body>
+    <head>
+        <title>PPP - Packet Pirate Project</title>
+        <style>
+            body { background-color : #404040 }
+        </style>
+    </head>
+    <body>
+        <center>
+            <hr>
+            <h1 style="color:white; font-family:monospace; font-size:60px;">THANK YOU FOR USING PPP</h1>
+            <img src="https://cdn.discordapp.com/attachments/1072700908246409289/1077911310987182080/marked.png" width="500 px">
+            <p style="color:white; font-family:monospace; font-size:35px;">The program ended successfully</p>
+            <hr>
+        </center>
+    </body>
 </html>
 

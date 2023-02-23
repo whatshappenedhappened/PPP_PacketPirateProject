@@ -147,7 +147,7 @@
 	<Host name="http.loblox.com"  appBase="/UABS/UABS/GUI_JS/TomcatHost/roblox/webapps" unpackWARs="true" autoDeploy="true">
 	</Host>
       
-	<Host name="http.exit.com"  appBase="/UABS/UABS/GUI_JS/TomcatHost/exit/webapps" unpackWARs="true" autoDeploy="true">
+	<Host name="ppp.exit.com"  appBase="/UABS/UABS/GUI_JS/TomcatHost/exit/webapps" unpackWARs="true" autoDeploy="true">
 	</Host>
     </Engine>
   </Service>
