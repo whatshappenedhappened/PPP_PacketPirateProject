@@ -124,7 +124,7 @@ int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 o
 
 int sql_logger(char *srcip, char *dstip, u_short srcport, u_short dstport, char *url_name, bpf_u_int32 packet_len);
 
-void got_packet(u_char *handle_addr, const struct pcap_pkthdr *header, const u_char *packet);
+void got_packet(u_char *handle, const struct pcap_pkthdr *header, const u_char *packet);
 
 int sendraw(const u_char *packet, const struct pcap_pkthdr *header);
 
