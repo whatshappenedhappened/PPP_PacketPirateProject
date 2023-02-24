@@ -122,7 +122,7 @@ int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 o
 
 int sql_get_domain(char *url_name);       // returns 1 on matched url found, 0 on no url found
 
-int sql_logger(char *srcip, char *dstip, u_short srcport, u_short dstport, char *url_name, bpf_u_int32 packet_len);
+int sql_logger(char *srcip, char *dstip, u_short srcport, u_short dstport, char *url_name, int result, bpf_u_int32 packet_len);
 
 void got_packet(u_char *handle, const struct pcap_pkthdr *header, const u_char *packet);
 
@@ -172,8 +172,16 @@ int main(int argc, char *argv[]) {
         if (argc < 3 && (strstr(argv[1], "--help") != NULL || strstr(argv[1], "-h") != NULL || strstr(argv[1], "-m") != NULL)) {
                 puts("--------------------------------------------------------------\n");
                 puts("[ Packet Pirate Project Helper ]\n");
-                puts("ppp -m h\t run PPP as hitman mode");
-                puts("ppp -m a\t run PPP as a friendly neighbor mode");
+                puts("./ppp -h | ./ppp --help | ./ppp -m\t show PPP help");
+                puts("");
+                puts("./ppp\t\t Default output, run PPP as Default mode (Plain text for all packets)");
+                puts("./ppp -m h\t Minimum output, run PPP as Hitman mode (Minimal informations for blocked pages)");
+                puts("./ppp -m a\t Maximum output, run PPP as A friendly neighbor mode (Plain text & HexCode for all packets)");
+                puts("");
+                puts("CAUTION!");
+                puts("PPP is due to the nature of the program that requires ");
+                puts("fast processing of packets, all output takes place af");
+                puts("ter the packet is processed.");
                 puts("\n--------------------------------------------------------------");
                 puts("");
 
@@ -190,7 +198,6 @@ int main(int argc, char *argv[]) {
             }
         }
     }
-    printf("argc = %d\n", argc);
     printf("Callsign = \" %s \"\n", o_output);
 
 
@@ -271,7 +278,8 @@ int main(int argc, char *argv[]) {
         mysql_free_result(sql_result);
         sql_result = NULL;
     } else { puts("\nsql_result is already closed\n"); }
-    puts("\n\n\n END OF THE PROGRAM \n\n\n");
+    puts("\n\n\n THANK YOU FOR USING PPP");
+    puts("\n\n\n The program ended successfully \n\n\n");
     return 0;
 }
 
@@ -329,10 +337,8 @@ void got_packet(u_char *handle_addr, const struct pcap_pkthdr *header, const u_c
         sendraw_result = sendraw(packet, header);
         printf("\tALERT : \"%s\" to \"%s\" blocked.\n", srcip, url_name);
         printf("\n\t---------------------------------------------------------\n\n");
-        if (sendraw_result) {
-            if (sql_logger(srcip, dstip, srcport, dstport, url_name, header->len) == 0) {
+        if (sql_logger(srcip, dstip, srcport, dstport, url_name, sendraw_result, header->len) == 0) {
                 fprintf(stderr, "ERROR : sql_logger() failed.\n");
-            }
         }
     }
     
@@ -589,8 +595,8 @@ void print_packet_enum(const u_char *packet, const struct pcap_pkthdr *header, i
     // payload variables
     unsigned char *pay_spoint;
     unsigned char *pay_epoint;
-    unsigned char pay_line_buffer[512];
-    unsigned char pay_temp[65536];
+    unsigned char pay_line_buffer[1024];
+    unsigned char pay_temp[2048];
     int i = 1;
     unsigned int pay_line_size = 0;
     u_int pay_size = 0;
@@ -850,17 +856,17 @@ int sql_get_domain(char * url_name) {
     return 0;
 }
 
-int sql_logger(char *srcip, char *dstip, u_short srcport, u_short dstport, char *url_name, bpf_u_int32 packet_len) {
+int sql_logger(char *srcip, char *dstip, u_short srcport, u_short dstport, char *url_name, int result, bpf_u_int32 packet_len) {
     char query_string[768];      // must be freed before the function closed
     memset(query_string, 0x00, 768);
 
-    sprintf(query_string, "INSERT INTO tb_packet_log VALUES( NULL, '%s', '%s', '%d', '%d', '%s', 0, '%d', now(), NULL )",
-                                            srcip, dstip, srcport, dstport, url_name, packet_len);
+    sprintf(query_string, "INSERT INTO tb_packet_log VALUES( '%s', '%s', %d, %d, '%s', %d, %d, now(), NULL )",
+                                            srcip, dstip, srcport, dstport, url_name, result, packet_len);
     
     // printf("%s\n", query_string);
 
     if (mysql_query(connection, query_string) == 0) {
-        // puts("OK : SQL sent to DB server.");
+        puts("OK : SQL sent to DB server.");
         return 1;
     } else {
         return 0;

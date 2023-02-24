@@ -22,7 +22,7 @@ request.setAttribute("tomcatUrl", "https://tomcat.apache.org/");
 request.setAttribute("tomcatDocUrl", "/docs/");
 request.setAttribute("tomcatExamplesUrl", "/examples/");
 
-Thread.sleep(2000);
+Thread.sleep(1500);
 
 %>
 
